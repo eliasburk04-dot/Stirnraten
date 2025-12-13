@@ -26,12 +26,15 @@ lib/
 │   └── game_service.dart     # Firebase & game logic
 ├── screens/
 │   ├── screens.dart          # Exports all screens
-│   ├── home_screen.dart      # Create/Join room
-│   ├── join_room_screen.dart # Enter room code
-│   ├── lobby_screen.dart     # Wait for players
-│   └── game_screen.dart      # All game phases
-└── utils/
-    └── constants.dart        # App constants
+│   ├── home_screen.dart      # Create/Join room (redesigned)
+│   ├── join_room_screen.dart # Enter room code (redesigned)
+│   ├── lobby_screen.dart     # Wait for players (redesigned)
+│   └── game_screen.dart      # All game phases (redesigned)
+├── utils/
+│   ├── constants.dart        # App constants
+│   └── theme.dart            # App theme with gradients & dark mode
+└── widgets/
+    └── animated_widgets.dart # Reusable animated widgets
 ```
 
 ## Firebase Configuration

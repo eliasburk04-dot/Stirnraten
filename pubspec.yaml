@@ -1,0 +1,40 @@
+name: luegner_spiel
+description: A multiplayer social deception game where one player gets a different question and must blend in.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Firebase for real-time multiplayer
+  firebase_core: ^2.24.2
+  firebase_database: ^10.4.0
+  
+  # QR Code generation and scanning
+  qr_flutter: ^4.1.0
+  qr_code_scanner: ^1.0.1
+  
+  # State management
+  provider: ^6.1.1
+  
+  # Utilities
+  uuid: ^4.2.2
+  
+  # UI enhancements
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/

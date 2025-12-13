@@ -1,0 +1,5 @@
+# Assets Directory
+
+Place any assets (images, fonts, etc.) in this directory.
+
+They will be available to the app through the `assets/` path.

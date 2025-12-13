@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
 import 'services/game_service.dart';
 import 'screens/home_screen.dart';
+import 'utils/theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,30 +25,7 @@ class LuegnerApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Lügner - The Liar Game',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6C63FF),
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-          textTheme: GoogleFonts.poppinsTextTheme(
-            ThemeData.dark().textTheme,
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-          cardTheme: CardThemeData(
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
+        theme: AppTheme.darkTheme,
         home: const HomeScreen(),
       ),
     );

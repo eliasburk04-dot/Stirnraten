@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../services/game_service.dart';
 import '../models/models.dart';
+import '../utils/theme.dart';
+import '../widgets/animated_widgets.dart';
 import 'home_screen.dart';
+import 'lobby_screen.dart';
 
 class GameScreen extends StatelessWidget {
   const GameScreen({super.key});
@@ -15,15 +18,17 @@ class GameScreen extends StatelessWidget {
         final room = gameService.currentRoom;
 
         if (room == null) {
-          // Room was deleted or player was kicked
           WidgetsBinding.instance.addPostFrameCallback((_) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const HomeScreen()),
             );
           });
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            body: Container(
+              decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+              child: const Center(child: CircularProgressIndicator(color: AppTheme.primaryPurple)),
+            ),
           );
         }
 
@@ -42,17 +47,7 @@ class GameScreen extends StatelessWidget {
           },
           child: Scaffold(
             body: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Theme.of(context).colorScheme.primary.withOpacity(0.3),
-                    Theme.of(context).colorScheme.surface,
-                    Theme.of(context).colorScheme.secondary.withOpacity(0.2),
-                  ],
-                ),
-              ),
+              decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
               child: SafeArea(
                 child: _buildGamePhase(context, room, gameService),
               ),
@@ -67,17 +62,19 @@ class GameScreen extends StatelessWidget {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Leave Game?'),
-            content: const Text('Are you sure you want to leave the game?'),
+            backgroundColor: AppTheme.cardDark,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Spiel verlassen?'),
+            content: const Text('Bist du sicher, dass du das Spiel verlassen möchtest?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: const Text('Abbrechen'),
               ),
-              TextButton(
+              ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Leave'),
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRed),
+                child: const Text('Verlassen'),
               ),
             ],
           ),
@@ -100,15 +97,62 @@ class GameScreen extends StatelessWidget {
       case GameState.reveal:
         return _RevealPhase(room: room, gameService: gameService);
       case GameState.lobby:
-        // Should not happen, but handle gracefully
         return const Center(child: CircularProgressIndicator());
     }
   }
 }
 
-// ============================================================================
-// QUESTIONING PHASE - Display the question
-// ============================================================================
+class _PhaseHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color? color;
+
+  const _PhaseHeader({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: color != null
+                ? LinearGradient(colors: [color!, color!.withOpacity(0.7)])
+                : AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (color ?? AppTheme.primaryPurple).withOpacity(0.4),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Icon(icon, size: 32, color: Colors.white),
+        ),
+        const SizedBox(height: 16),
+        GradientText(
+          text: title,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
 
 class _QuestioningPhase extends StatelessWidget {
   final Room room;
@@ -126,101 +170,108 @@ class _QuestioningPhase extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Header
-          _PhaseHeader(
-            title: 'Round ${room.roundNumber}',
-            subtitle: 'Read your question carefully!',
-            icon: Icons.quiz,
+          FadeSlideTransition(
+            child: _PhaseHeader(
+              title: 'Runde ${room.roundNumber}',
+              subtitle: 'Lies deine Frage aufmerksam!',
+              icon: Icons.quiz,
+            ),
           ),
-          
           const Spacer(),
-
-          // Secret liar indicator (only visible to liar)
           if (isLiar)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.red),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.warning, color: Colors.red, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'You are the LIAR! Blend in!',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
+            FadeSlideTransition(
+              delay: const Duration(milliseconds: 200),
+              child: PulsingWidget(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.liarGradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.accentRed.withOpacity(0.4),
+                        blurRadius: 15,
+                      ),
+                    ],
                   ),
-                ],
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.white, size: 22),
+                      SizedBox(width: 10),
+                      Text(
+                        'Du bist der LÜGNER! Pass dich an!',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           const SizedBox(height: 24),
-
-          // Question Card
-          Card(
-            elevation: 12,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.help_outline,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    question?.question ?? 'Loading question...',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                  ),
-                ],
+          FadeSlideTransition(
+            delay: const Duration(milliseconds: 300),
+            child: AnimatedGradientBorder(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.help_outline, size: 36, color: AppTheme.primaryPurple),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      question?.question ?? 'Lade Frage...',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-
           const Spacer(),
-
-          // Continue button (host only)
-          if (isHost)
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: () => gameService.startAnswering(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text(
-                  'Start Answering',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            )
-          else
-            const Text(
-              'Waiting for host to continue...',
-              style: TextStyle(color: Colors.white54),
-            ),
+          FadeSlideTransition(
+            delay: const Duration(milliseconds: 400),
+            child: isHost
+                ? GradientButton(
+                    text: 'Antworten starten',
+                    icon: Icons.arrow_forward,
+                    onPressed: () => gameService.startAnswering(),
+                  )
+                : Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+                        ),
+                        const SizedBox(width: 12),
+                        Text('Warte auf den Host...', style: TextStyle(color: Colors.white.withOpacity(0.6))),
+                      ],
+                    ),
+                  ),
+          ),
         ],
       ),
     );
   }
 }
-
-// ============================================================================
-// ANSWERING PHASE - Submit answer
-// ============================================================================
 
 class _AnsweringPhase extends StatefulWidget {
   final Room room;
@@ -252,11 +303,10 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
     final answer = _answerController.text.trim();
     if (answer.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter an answer')),
+        const SnackBar(content: Text('Bitte gib eine Antwort ein')),
       );
       return;
     }
-
     await widget.gameService.submitAnswer(answer);
     setState(() => _hasSubmitted = true);
   }
@@ -267,7 +317,6 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
     final answeredCount = widget.room.playersWhoAnswered.length;
     final totalPlayers = widget.room.players.length;
 
-    // Check if all players answered - host moves to voting
     if (widget.room.allAnswered && widget.gameService.isHost) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.gameService.startVoting();
@@ -278,125 +327,80 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          _PhaseHeader(
-            title: 'Answer Time',
-            subtitle: 'Enter your answer below',
-            icon: Icons.edit,
-          ),
-          const SizedBox(height: 16),
-
-          // Progress indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$answeredCount / $totalPlayers answered',
-              style: const TextStyle(color: Colors.white70),
+          FadeSlideTransition(
+            child: _PhaseHeader(
+              title: 'Antworten',
+              subtitle: 'Gib deine Antwort ein',
+              icon: Icons.edit_note,
             ),
           ),
-          const SizedBox(height: 24),
-
-          // Question reminder
-          Card(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.quiz,
-                    color: Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 20),
+          AnimatedCounter(value: answeredCount, total: totalPlayers, label: 'haben geantwortet'),
+          const SizedBox(height: 20),
+          GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.quiz, color: AppTheme.primaryPurple, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    question?.question ?? '',
+                    style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8)),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      question?.question ?? '',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          
           const Spacer(),
-
-          if (_hasSubmitted)
-            // Already submitted
-            Card(
-              color: Colors.green.withOpacity(0.2),
-              child: const Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 48),
-                    SizedBox(height: 16),
-                    Text(
-                      'Answer Submitted!',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
+          _hasSubmitted
+              ? FadeSlideTransition(
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentGreen.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 48),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Antwort abgeschickt!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.accentGreen)),
+                        const SizedBox(height: 8),
+                        Text('Warte auf andere Spieler...', style: TextStyle(color: Colors.white.withOpacity(0.6))),
+                      ],
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Waiting for other players...',
-                      style: TextStyle(color: Colors.white70),
+                  ),
+                )
+              : FadeSlideTransition(
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _answerController,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 20),
+                          decoration: InputDecoration(
+                            hintText: 'Deine Antwort',
+                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                          ),
+                          onSubmitted: (_) => _submitAnswer(),
+                        ),
+                        const SizedBox(height: 20),
+                        GradientButton(
+                          text: 'Antwort abschicken',
+                          icon: Icons.send,
+                          onPressed: _submitAnswer,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            )
-          else
-            // Answer input
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _answerController,
-                      keyboardType: TextInputType.text,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 24),
-                      decoration: InputDecoration(
-                        hintText: 'Your answer',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surface,
-                      ),
-                      onSubmitted: (_) => _submitAnswer(),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _submitAnswer,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text(
-                          'Submit Answer',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
           const Spacer(),
-
-          // Answered players
           _buildAnsweredList(),
         ],
       ),
@@ -413,30 +417,16 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: hasAnswered
-                ? Colors.green.withOpacity(0.2)
-                : Colors.grey.withOpacity(0.2),
+            color: hasAnswered ? AppTheme.accentGreen.withOpacity(0.2) : Colors.white.withOpacity(0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasAnswered ? Colors.green : Colors.grey,
-            ),
+            border: Border.all(color: hasAnswered ? AppTheme.accentGreen : Colors.white.withOpacity(0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                hasAnswered ? Icons.check : Icons.hourglass_empty,
-                size: 16,
-                color: hasAnswered ? Colors.green : Colors.grey,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                player.name,
-                style: TextStyle(
-                  color: hasAnswered ? Colors.green : Colors.grey,
-                  fontSize: 12,
-                ),
-              ),
+              Icon(hasAnswered ? Icons.check : Icons.hourglass_empty, size: 14, color: hasAnswered ? AppTheme.accentGreen : Colors.white54),
+              const SizedBox(width: 6),
+              Text(player.name, style: TextStyle(fontSize: 12, color: hasAnswered ? AppTheme.accentGreen : Colors.white54)),
             ],
           ),
         );
@@ -444,10 +434,6 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
     );
   }
 }
-
-// ============================================================================
-// WAITING PHASE - Waiting for all answers
-// ============================================================================
 
 class _WaitingPhase extends StatelessWidget {
   final Room room;
@@ -457,22 +443,24 @@ class _WaitingPhase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 24),
-          Text('Waiting for all players...'),
+          PulsingWidget(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(gradient: AppTheme.primaryGradient, shape: BoxShape.circle),
+              child: const Icon(Icons.hourglass_empty, size: 48, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text('Warte auf alle Spieler...', style: TextStyle(fontSize: 18)),
         ],
       ),
     );
   }
 }
-
-// ============================================================================
-// VOTING PHASE - Vote for the liar
-// ============================================================================
 
 class _VotingPhase extends StatefulWidget {
   final Room room;
@@ -495,13 +483,7 @@ class _VotingPhaseState extends State<_VotingPhase> {
   }
 
   void _submitVote() async {
-    if (_selectedPlayerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a player')),
-      );
-      return;
-    }
-
+    if (_selectedPlayerId == null) return;
     await widget.gameService.submitVote(_selectedPlayerId!);
     setState(() => _hasVoted = true);
   }
@@ -512,7 +494,6 @@ class _VotingPhaseState extends State<_VotingPhase> {
     final votedCount = widget.room.playersWhoVoted.length;
     final totalPlayers = widget.room.players.length;
 
-    // Check if all players voted - move to results
     if (widget.room.allVoted && widget.gameService.isHost) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.gameService.showResults();
@@ -523,120 +504,61 @@ class _VotingPhaseState extends State<_VotingPhase> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          _PhaseHeader(
-            title: 'Vote!',
-            subtitle: 'Who had a different question?',
-            icon: Icons.how_to_vote,
-          ),
-          const SizedBox(height: 16),
-
-          // Progress
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$votedCount / $totalPlayers voted',
-              style: const TextStyle(color: Colors.white70),
+          FadeSlideTransition(
+            child: _PhaseHeader(
+              title: 'Abstimmung!',
+              subtitle: 'Wer hatte eine andere Frage?',
+              icon: Icons.how_to_vote,
+              color: AppTheme.accentRed,
             ),
           ),
           const SizedBox(height: 16),
-
-          // Original question
-          Card(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'The Question Was:',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    currentQuestion?.question ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
+          AnimatedCounter(value: votedCount, total: totalPlayers, label: 'haben gewählt', color: AppTheme.accentRed),
+          const SizedBox(height: 16),
+          GlassCard(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Die Frage war:', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                const SizedBox(height: 6),
+                Text(currentQuestion?.question ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+              ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // Answers list
           Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Answers:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: widget.room.players.length,
-                        itemBuilder: (context, index) {
-                          final player = widget.room.players[index];
-                          return _buildAnswerTile(player);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: ListView.builder(
+              itemCount: widget.room.players.length,
+              itemBuilder: (context, index) {
+                final player = widget.room.players[index];
+                return _buildAnswerTile(player);
+              },
             ),
           ),
           const SizedBox(height: 16),
-
-          if (_hasVoted)
-            Card(
-              color: Colors.green.withOpacity(0.2),
-              child: const Padding(
-                padding: EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text(
-                      'Vote submitted! Waiting for others...',
-                      style: TextStyle(color: Colors.green),
-                    ),
-                  ],
+          _hasVoted
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGreen.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, color: AppTheme.accentGreen),
+                      SizedBox(width: 10),
+                      Text('Stimme abgegeben! Warte...', style: TextStyle(color: AppTheme.accentGreen)),
+                    ],
+                  ),
+                )
+              : GradientButton(
+                  text: 'Stimme abgeben',
+                  icon: Icons.how_to_vote,
+                  gradient: AppTheme.liarGradient,
+                  onPressed: _selectedPlayerId != null ? _submitVote : null,
                 ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: _selectedPlayerId != null ? _submitVote : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.how_to_vote),
-                label: const Text(
-                  'Submit Vote',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -647,42 +569,18 @@ class _VotingPhaseState extends State<_VotingPhase> {
     final isSelected = player.id == _selectedPlayerId;
 
     return GestureDetector(
-      onTap: _hasVoted || isMe
-          ? null
-          : () => setState(() => _selectedPlayerId = player.id),
+      onTap: _hasVoted || isMe ? null : () => setState(() => _selectedPlayerId = player.id),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.red.withOpacity(0.3)
-              : isMe
-                  ? Colors.blue.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? Colors.red
-                : isMe
-                    ? Colors.blue.withOpacity(0.3)
-                    : Colors.transparent,
-            width: 2,
-          ),
+          color: isSelected ? AppTheme.accentRed.withOpacity(0.3) : isMe ? AppTheme.primaryPurple.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isSelected ? AppTheme.accentRed : isMe ? AppTheme.primaryPurple.withOpacity(0.3) : Colors.transparent, width: 2),
         ),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: player.avatarColor,
-              radius: 18,
-              child: Text(
-                player.initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
+            PlayerAvatar(name: player.name, color: player.avatarColor, size: 40),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -690,35 +588,27 @@ class _VotingPhaseState extends State<_VotingPhase> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        player.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          color: isMe ? Colors.blue : null,
+                      Text(player.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      if (isMe) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.primaryPurple, borderRadius: BorderRadius.circular(8)),
+                          child: const Text('DU', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
-                      ),
-                      if (isMe)
-                        const Text(
-                          ' (You)',
-                          style: TextStyle(color: Colors.blue, fontSize: 12),
-                        ),
+                      ],
                     ],
                   ),
-                  Text(
-                    player.answer ?? 'No answer',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
+                  const SizedBox(height: 4),
+                  Text(player.answer ?? '', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
                 ],
               ),
             ),
-            if (!isMe && !_hasVoted)
-              Radio<String>(
-                value: player.id,
-                groupValue: _selectedPlayerId,
-                onChanged: (value) => setState(() => _selectedPlayerId = value),
+            if (isSelected)
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: AppTheme.accentRed, shape: BoxShape.circle),
+                child: const Icon(Icons.check, color: Colors.white, size: 16),
               ),
           ],
         ),
@@ -726,10 +616,6 @@ class _VotingPhaseState extends State<_VotingPhase> {
     );
   }
 }
-
-// ============================================================================
-// RESULTS PHASE - Show voting results
-// ============================================================================
 
 class _ResultsPhase extends StatelessWidget {
   final Room room;
@@ -739,118 +625,68 @@ class _ResultsPhase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final voteCounts = room.voteCounts;
-    final sortedPlayers = List<Player>.from(room.players)
-      ..sort((a, b) => (voteCounts[b.id] ?? 0).compareTo(voteCounts[a.id] ?? 0));
-
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          _PhaseHeader(
-            title: 'Voting Results',
-            subtitle: 'Who received the most votes?',
-            icon: Icons.bar_chart,
+          FadeSlideTransition(
+            child: _PhaseHeader(
+              title: 'Ergebnisse',
+              subtitle: 'Die Stimmen sind gezählt!',
+              icon: Icons.bar_chart,
+            ),
           ),
           const SizedBox(height: 24),
-
           Expanded(
             child: ListView.builder(
-              itemCount: sortedPlayers.length,
+              itemCount: room.players.length,
               itemBuilder: (context, index) {
-                final player = sortedPlayers[index];
-                final votes = voteCounts[player.id] ?? 0;
-                final maxVotes = voteCounts.values.reduce((a, b) => a > b ? a : b);
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: votes == maxVotes && maxVotes > 0
-                        ? Border.all(color: Colors.red, width: 2)
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: player.avatarColor,
-                        child: Text(
-                          player.initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                final player = room.players[index];
+                final votes = room.getVotesFor(player.id);
+                return FadeSlideTransition(
+                  delay: Duration(milliseconds: 100 * index),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        PlayerAvatar(name: player.name, color: player.avatarColor, size: 44),
+                        const SizedBox(width: 14),
+                        Expanded(child: Text(player.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: votes > 0 ? AppTheme.accentRed.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$votes ${votes == 1 ? "Stimme" : "Stimmen"}',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: votes > 0 ? AppTheme.accentRed : Colors.white54),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          player.name,
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: votes == maxVotes && maxVotes > 0
-                              ? Colors.red.withOpacity(0.3)
-                              : Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '$votes votes',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: votes == maxVotes && maxVotes > 0
-                                ? Colors.red
-                                : Colors.white70,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
             ),
           ),
-          const SizedBox(height: 16),
-
           if (gameService.isHost)
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: () => gameService.revealLiar(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.visibility),
-                label: const Text(
-                  'Reveal the Liar!',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            )
-          else
-            const Text(
-              'Waiting for host to reveal...',
-              style: TextStyle(color: Colors.white54),
+            GradientButton(
+              text: 'Lügner enthüllen',
+              icon: Icons.visibility,
+              gradient: AppTheme.liarGradient,
+              onPressed: () => gameService.revealLiar(),
             ),
         ],
       ),
     );
   }
 }
-
-// ============================================================================
-// REVEAL PHASE - Show who the liar was
-// ============================================================================
 
 class _RevealPhase extends StatelessWidget {
   final Room room;
@@ -860,240 +696,85 @@ class _RevealPhase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final liar = room.liar;
+    final liar = room.players.where((p) => p.id == room.liarId).firstOrNull;
     final liarWasCaught = room.liarWasCaught;
-    final correctGuessers = room.playersWhoGuessedCorrectly;
 
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            _PhaseHeader(
-              title: 'The Truth Revealed!',
-              subtitle: liarWasCaught ? 'The liar was caught!' : 'The liar escaped!',
-              icon: liarWasCaught ? Icons.celebration : Icons.sentiment_very_satisfied,
+      child: Column(
+        children: [
+          FadeSlideTransition(
+            child: _PhaseHeader(
+              title: liarWasCaught ? 'Erwischt!' : 'Entkommen!',
+              subtitle: liarWasCaught ? 'Der Lügner wurde gefunden!' : 'Der Lügner ist entkommen!',
+              icon: liarWasCaught ? Icons.celebration : Icons.sentiment_very_dissatisfied,
+              color: liarWasCaught ? AppTheme.accentGreen : AppTheme.accentRed,
             ),
-            const SizedBox(height: 32),
-
-            // Liar reveal card
-            Card(
-              color: Colors.red.withOpacity(0.2),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const Text(
-                      'THE LIAR WAS',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: liar?.avatarColor ?? Colors.red,
-                      child: Text(
-                        liar?.initials ?? '?',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 28,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      liar?.name ?? 'Unknown',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Liar's question
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "The Liar's Question:",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      room.liarQuestion?.question ?? 'Unknown',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Everyone Else Got:',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      room.currentQuestion?.question ?? 'Unknown',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Who guessed correctly
-            if (correctGuessers.isNotEmpty) ...[
-              Card(
-                color: Colors.green.withOpacity(0.2),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.star, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text(
-                            'Correct Guesses',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: correctGuessers.map((player) {
-                          return Chip(
-                            avatar: CircleAvatar(
-                              backgroundColor: player.avatarColor,
-                              child: Text(
-                                player.initials,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            label: Text(player.name),
-                          );
-                        }).toList(),
-                      ),
-                    ],
+          ),
+          const Spacer(),
+          if (liar != null)
+            FadeSlideTransition(
+              delay: const Duration(milliseconds: 300),
+              child: Column(
+                children: [
+                  PulsingWidget(
+                    child: PlayerAvatar(name: liar.name, color: liar.avatarColor, size: 100, isLiar: true, showBorder: true),
                   ),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await gameService.leaveRoom();
-                      if (context.mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const HomeScreen()),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.home),
-                    label: const Text('Home'),
+                  const SizedBox(height: 20),
+                  const Text('Der Lügner war:', style: TextStyle(color: Colors.white54)),
+                  const SizedBox(height: 8),
+                  GradientText(
+                    text: liar.name,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                    gradient: AppTheme.liarGradient,
                   ),
-                ),
-                const SizedBox(width: 16),
-                if (gameService.isHost)
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => gameService.playAgain(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.replay),
-                      label: const Text('Play Again'),
+                  const SizedBox(height: 24),
+                  GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Text('Die Lügner-Frage:', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5))),
+                        const SizedBox(height: 8),
+                        Text(room.liarQuestion?.question ?? '', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w500)),
+                      ],
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ],
-        ),
+          const Spacer(),
+          if (gameService.isHost) ...[
+            GradientButton(
+              text: 'Nochmal spielen',
+              icon: Icons.replay,
+              onPressed: () => gameService.playAgain(),
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () async {
+                await gameService.endGame();
+                if (context.mounted) {
+                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+                }
+              },
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+                ),
+                child: Center(child: Text('Beenden', style: TextStyle(color: Colors.white.withOpacity(0.7)))),
+              ),
+            ),
+          ] else
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(14)),
+              child: const Text('Warte auf den Host...'),
+            ),
+        ],
       ),
-    );
-  }
-}
-
-// ============================================================================
-// SHARED WIDGETS
-// ============================================================================
-
-class _PhaseHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  const _PhaseHeader({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Icon(
-            icon,
-            size: 32,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.white54,
-              ),
-        ),
-      ],
     );
   }
 }

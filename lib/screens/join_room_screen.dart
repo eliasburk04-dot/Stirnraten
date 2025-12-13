@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/game_service.dart';
+import '../utils/theme.dart';
+import '../widgets/animated_widgets.dart';
 import 'lobby_screen.dart';
 
 class JoinRoomScreen extends StatefulWidget {
@@ -28,12 +30,12 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
 
   Future<void> _joinRoom(String code) async {
     if (code.isEmpty) {
-      _showError('Please enter a room code');
+      _showError('Bitte gib einen Raum-Code ein');
       return;
     }
 
     if (code.length < 6) {
-      _showError('Room code must be 6 characters');
+      _showError('Raum-Code muss 6 Zeichen haben');
       return;
     }
 
@@ -47,7 +49,13 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
     if (success && mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LobbyScreen()),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LobbyScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        ),
       );
     } else if (gameService.errorMessage != null && mounted) {
       _showError(gameService.errorMessage!);
@@ -58,10 +66,24 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red.shade400,
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.accentRed.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.error_outline, color: AppTheme.accentRed, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.cardDark,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
       ),
     );
   }
@@ -69,140 +91,208 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Join Room'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.3),
-              Theme.of(context).colorScheme.surface,
+        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildAppBar(),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildPlayerInfo(),
+                      const SizedBox(height: 32),
+                      _buildCodeInput(),
+                      const SizedBox(height: 24),
+                      _buildJoinButton(),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
-        child: SafeArea(
-          child: _buildCodeEntry(),
         ),
       ),
     );
   }
 
-  Widget _buildCodeEntry() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: Text(
-                      widget.playerName.substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Joining as',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
-                      Text(
-                        widget.playerName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: const Icon(Icons.arrow_back, color: Colors.white),
             ),
           ),
-          const SizedBox(height: 32),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
+          const SizedBox(width: 16),
+          Text(
+            'Raum beitreten',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerInfo() {
+    return FadeSlideTransition(
+      child: GlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            PlayerAvatar(
+              name: widget.playerName,
+              color: AppTheme.primaryPurple,
+              size: 56,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Enter Room Code',
+                    'Du trittst bei als',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.playerName,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _codeController,
-                    textCapitalization: TextCapitalization.characters,
-                    textAlign: TextAlign.center,
-                    maxLength: 6,
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 8,
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.accentGreen.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Bereit',
+                    style: TextStyle(
+                      color: AppTheme.accentGreen,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'ABC123',
-                      hintStyle: TextStyle(
-                        color: Colors.white24,
-                        letterSpacing: 8,
-                      ),
-                      counterText: '',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.surface,
-                    ),
-                    onSubmitted: _joinRoom,
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: _isJoining ? null : () => _joinRoom(_codeController.text.trim()),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-              ),
-              icon: _isJoining
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCodeInput() {
+    return FadeSlideTransition(
+      delay: const Duration(milliseconds: 200),
+      child: GlassCard(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.vpn_key, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Raum-Code eingeben',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                    )
-                  : const Icon(Icons.login),
-              label: Text(
-                _isJoining ? 'Joining...' : 'Join Room',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _codeController,
+              textCapitalization: TextCapitalization.characters,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 12,
+              ),
+              decoration: InputDecoration(
+                hintText: '------',
+                hintStyle: TextStyle(
+                  color: Colors.white.withOpacity(0.2),
+                  letterSpacing: 12,
+                ),
+                counterText: '',
+                filled: true,
+                fillColor: AppTheme.cardDark,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 2),
+                ),
+              ),
+              onSubmitted: _joinRoom,
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                'Frage den Gastgeber nach dem 6-stelligen Code',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJoinButton() {
+    return FadeSlideTransition(
+      delay: const Duration(milliseconds: 300),
+      child: GradientButton(
+        text: _isJoining ? 'Wird beigetreten...' : 'Beitreten',
+        icon: Icons.login,
+        isLoading: _isJoining,
+        onPressed: _isJoining ? null : () => _joinRoom(_codeController.text.trim()),
       ),
     );
   }

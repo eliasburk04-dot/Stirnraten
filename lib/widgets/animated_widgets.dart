@@ -67,7 +67,7 @@ class _GradientButtonState extends State<GradientButton>
             boxShadow: isEnabled
                 ? [
                     BoxShadow(
-                      color: AppTheme.primaryPurple.withOpacity(0.4),
+                      color: Color.fromRGBO(124,58,237,0.4),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -127,15 +127,15 @@ class GlassCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.white.withOpacity(0.1),
-            Colors.white.withOpacity(0.05),
+            Color.fromRGBO(255,255,255,0.1),
+            Color.fromRGBO(255,255,255,0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Color.fromRGBO(255,255,255,0.1),
         ),
       ),
       child: ClipRRect(
@@ -522,7 +522,7 @@ class AnimatedCounter extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.white.withOpacity(0.6),
+            color: Color.fromRGBO(255,255,255,0.6),
           ),
         ),
       ],

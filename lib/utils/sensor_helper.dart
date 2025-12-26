@@ -1,5 +1,5 @@
 import 'sensor_helper_stub.dart'
-    if (dart.library.js_util) 'sensor_helper_web.dart' as impl;
+    if (dart.library.html) 'sensor_helper_web.dart' as impl;
 
 Future<bool> requestSensorPermission() => impl.requestSensorPermission();
 

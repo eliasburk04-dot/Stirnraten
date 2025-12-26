@@ -1,32 +1,37 @@
-import 'dart:js_util' as js_util;
+import 'package:js/js.dart';
+
+@JS('requestDeviceMotionPermission')
+external dynamic _requestDeviceMotionPermission();
+
+@JS('latestAccelerometerData')
+external dynamic get _latestAccelerometerData;
 
 Future<bool> requestSensorPermission() async {
   try {
-    final result = await js_util.promiseToFuture(
-      js_util.callMethod(js_util.globalThis, 'requestDeviceMotionPermission', [])
-    );
+    final result = _requestDeviceMotionPermission();
+    if (result is Future) {
+      final v = await result;
+      return v == true;
+    }
     return result == true;
-  } catch (e) {
-    print('Error requesting sensor permission: $e');
+  } catch (_) {
     return false;
   }
 }
 
 List<double> getWebAccelerometerData() {
   try {
-    final data = js_util.getProperty(js_util.globalThis, 'latestAccelerometerData');
+    final data = _latestAccelerometerData;
     if (data != null) {
-      final x = js_util.getProperty(data, 'x');
-      final y = js_util.getProperty(data, 'y');
-      final z = js_util.getProperty(data, 'z');
+      final x = data.x;
+      final y = data.y;
+      final z = data.z;
       return [
         (x as num).toDouble(),
         (y as num).toDouble(),
-        (z as num).toDouble()
+        (z as num).toDouble(),
       ];
     }
-  } catch (e) {
-    // Ignore
-  }
+  } catch (_) {}
   return [0.0, 0.0, 0.0];
 }

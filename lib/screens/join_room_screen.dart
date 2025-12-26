@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:ui';
 
 import '../services/game_service.dart';
 import '../utils/theme.dart';
-import '../widgets/animated_widgets.dart';
+import '../widgets/glass_widgets.dart';
 import 'lobby_screen.dart';
 
 class JoinRoomScreen extends StatefulWidget {
@@ -92,22 +93,22 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      body: ModernBackground(
         child: SafeArea(
           child: Column(
             children: [
               _buildAppBar(),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildPlayerInfo(),
                       const SizedBox(height: 32),
                       _buildCodeInput(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 32),
                       _buildJoinButton(),
                     ],
                   ),
@@ -122,24 +123,39 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Color.fromRGBO(255,255,255,0.078),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Color.fromRGBO(255,255,255,0.157),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                ),
               ),
-              child: const Icon(Icons.arrow_back, color: Colors.white),
             ),
           ),
           const SizedBox(width: 16),
-          Text(
+          const Text(
             'Raum beitreten',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              letterSpacing: 0.2,
+            ),
           ),
         ],
       ),
@@ -147,158 +163,133 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   }
 
   Widget _buildPlayerInfo() {
-    return FadeSlideTransition(
-      child: GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            PlayerAvatar(
-              name: widget.playerName,
-              color: AppTheme.primaryPurple,
-              size: 56,
+    return GlassCard(
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Du trittst bei als',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.playerName,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ],
+            child: Center(
+              child: Text(
+                widget.playerName.isNotEmpty ? widget.playerName[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.accentGreen.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Bereit',
-                    style: TextStyle(
-                      color: AppTheme.accentGreen,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Du trittst bei als',
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(128),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.2,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  widget.playerName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildCodeInput() {
-    return FadeSlideTransition(
-      delay: const Duration(milliseconds: 200),
-      child: GlassCard(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(12),
+    return GlassCard(
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
                   ),
-                  child: const Icon(Icons.vpn_key, color: Colors.white, size: 20),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'Raum-Code eingeben',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _codeController,
-              textCapitalization: TextCapitalization.characters,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9]')),
-                UpperCaseTextFormatter(),
-              ],
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 12,
+                child: const Icon(Icons.vpn_key, color: Colors.white, size: 20),
               ),
-              decoration: InputDecoration(
-                hintText: '------',
-                hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.2),
-                  letterSpacing: 12,
-                ),
-                counterText: '',
-                filled: true,
-                fillColor: AppTheme.cardDark,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: AppTheme.primaryPurple, width: 2),
-                ),
-              ),
-              onSubmitted: _joinRoom,
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'Frage den Gastgeber nach dem 6-stelligen Code',
+              const SizedBox(width: 12),
+              const Text(
+                'Raum-Code',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 13,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 0.2,
                 ),
-                textAlign: TextAlign.center,
               ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          GlassTextField(
+            controller: _codeController,
+            textCapitalization: TextCapitalization.characters,
+            textAlign: TextAlign.center,
+            maxLength: 6,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9]')),
+              UpperCaseTextFormatter(),
+            ],
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 12,
+              color: Colors.white,
             ),
-          ],
-        ),
+            hintText: '------',
+            onSubmitted: _joinRoom,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Frage den Gastgeber nach dem 6-stelligen Code',
+            style: TextStyle(
+              color: Colors.white.withAlpha(128),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              letterSpacing: 0.2,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildJoinButton() {
-    return FadeSlideTransition(
-      delay: const Duration(milliseconds: 300),
-      child: GradientButton(
-        text: _isJoining ? 'Wird beigetreten...' : 'Beitreten',
-        icon: Icons.login,
-        isLoading: _isJoining,
-        onPressed: _isJoining ? null : () => _joinRoom(_codeController.text.trim()),
-      ),
+    return GlassButton(
+      text: _isJoining ? 'Wird beigetreten...' : 'Beitreten',
+      isFullWidth: true,
+      gradientColors: const [Color(0xFFA855F7), Color(0xFFEC4899)],
+      onPressed: _isJoining ? null : () => _joinRoom(_codeController.text.trim()),
     );
   }
 }
@@ -306,7 +297,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+      TextEditingValue oldValue, TextEditingValue newValue,) {
     return TextEditingValue(
       text: newValue.text.toUpperCase(),
       selection: newValue.selection,

@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import '../services/game_service.dart';
 import '../models/models.dart';
 import '../utils/theme.dart';
-import '../widgets/animated_widgets.dart';
+import '../widgets/glass_widgets.dart';
+import '../widgets/common_widgets.dart';
 import 'home_screen.dart';
 import 'lobby_screen.dart';
 
@@ -62,8 +63,7 @@ class GameScreen extends StatelessWidget {
             }
           },
           child: Scaffold(
-            body: Container(
-              decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+            body: ModernBackground(
               child: SafeArea(
                 child: _buildGamePhase(context, room, gameService),
               ),
@@ -139,30 +139,37 @@ class _PhaseHeader extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: color != null
-                ? LinearGradient(colors: [color!, color!.withOpacity(0.7)])
-                : AppTheme.primaryGradient,
+                ? LinearGradient(colors: [color!, color!])
+                : const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)]),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: (color ?? AppTheme.primaryPurple).withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
           ),
           child: Icon(icon, size: 32, color: Colors.white),
         ),
         const SizedBox(height: 16),
-        GradientText(
-          text: title,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        ShaderMask(
+          shaderCallback: (bounds) => (color != null
+              ? LinearGradient(colors: [color!, color!])
+              : const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)])
+          ).createShader(bounds),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+          ),
         ),
         const SizedBox(height: 8),
         Text(
           subtitle,
-          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+          style: TextStyle(
+            color: Colors.white.withAlpha(140),
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0.2,
+          ),
           textAlign: TextAlign.center,
         ),
       ],
@@ -185,73 +192,63 @@ class _QuestioningPhase extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          FadeSlideTransition(
-            child: _PhaseHeader(
-              title: 'Runde ${room.roundNumber}',
-              subtitle: 'Lies deine Frage aufmerksam!',
-              icon: Icons.quiz,
-            ),
+          _PhaseHeader(
+            title: 'Runde ${room.roundNumber}',
+            subtitle: 'Lies deine Frage aufmerksam!',
+            icon: Icons.quiz,
           ),
           const Spacer(),
           const SizedBox(height: 24),
-          FadeSlideTransition(
-            delay: const Duration(milliseconds: 300),
-            child: AnimatedGradientBorder(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryPurple.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.help_outline, size: 36, color: AppTheme.primaryPurple),
+          GlassCard(
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
                     ),
-                    const SizedBox(height: 24),
-                    Text(
-                      question?.question ?? 'Lade Frage...',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            height: 1.4,
-                          ),
-                    ),
-                  ],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.help_outline, size: 36, color: Colors.white),
                 ),
-              ),
+                const SizedBox(height: 24),
+                Text(
+                  question?.question ?? 'Lade Frage...',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    height: 1.4,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
           ),
           const Spacer(),
-          FadeSlideTransition(
-            delay: const Duration(milliseconds: 400),
-            child: isHost
-                ? GradientButton(
-                    text: 'Antworten starten',
-                    icon: Icons.arrow_forward,
-                    onPressed: () => gameService.startAnswering(),
-                  )
-                : Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
+          isHost
+              ? GlassButton(
+                  text: 'Antworten starten',
+                  isFullWidth: true,
+                  gradientColors: const [Color(0xFFA855F7), Color(0xFFEC4899)],
+                  onPressed: () => gameService.startAnswering(),
+                )
+              : GlassCard(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                         const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
                         ),
                         const SizedBox(width: 12),
-                        Text('Warte auf den Host...', style: TextStyle(color: Colors.white.withOpacity(0.6))),
+                        Text('Warte auf den Host...', style: TextStyle(color: Color.fromRGBO(255,255,255,0.6))),
                       ],
                     ),
                   ),
-          ),
         ],
       ),
     );
@@ -312,15 +309,51 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          FadeSlideTransition(
-            child: _PhaseHeader(
-              title: 'Antworten',
-              subtitle: 'Gib deine Antwort ein',
-              icon: Icons.edit_note,
-            ),
+          const _PhaseHeader(
+            title: 'Antworten',
+            subtitle: 'Gib deine Antwort ein',
+            icon: Icons.edit_note,
           ),
           const SizedBox(height: 20),
-          AnimatedCounter(value: answeredCount, total: totalPlayers, label: 'haben geantwortet'),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: answeredCount == totalPlayers
+                  ? const Color(0xFF10B981).withAlpha(51)
+                  : const Color(0xFFF59E0B).withAlpha(51),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: answeredCount == totalPlayers
+                    ? const Color(0xFF10B981).withAlpha(102)
+                    : const Color(0xFFF59E0B).withAlpha(102),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  answeredCount == totalPlayers
+                      ? Icons.check_circle
+                      : Icons.hourglass_empty,
+                  color: answeredCount == totalPlayers
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$answeredCount/$totalPlayers geantwortet',
+                  style: TextStyle(
+                    color: answeredCount == totalPlayers
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           GlassCard(
             padding: const EdgeInsets.all(16),
@@ -331,7 +364,7 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
                 Expanded(
                   child: Text(
                     question?.question ?? '',
-                    style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8)),
+                    style: TextStyle(fontSize: 13, color: Color.fromRGBO(255,255,255,0.8)),
                   ),
                 ),
               ],
@@ -339,29 +372,26 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
           ),
           const Spacer(),
           _hasSubmitted
-              ? FadeSlideTransition(
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentGreen.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 48),
+              ? GlassCard(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Color.fromRGBO(16,185,129,0.2),
+                          shape: BoxShape.circle,
                         ),
-                        const SizedBox(height: 16),
-                        const Text('Antwort abgeschickt!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.accentGreen)),
-                        const SizedBox(height: 8),
-                        Text('Warte auf andere Spieler...', style: TextStyle(color: Colors.white.withOpacity(0.6))),
-                      ],
-                    ),
+                        child: const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 48),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Antwort abgeschickt!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.accentGreen)),
+                      const SizedBox(height: 8),
+                      Text('Warte auf andere Spieler...', style: TextStyle(color: Color.fromRGBO(255,255,255,0.6))),
+                    ],
                   ),
                 )
-              : FadeSlideTransition(
-                  child: GlassCard(
+              : GlassCard(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
@@ -371,20 +401,21 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
                           style: const TextStyle(fontSize: 20),
                           decoration: InputDecoration(
                             hintText: 'Deine Antwort',
-                            hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                            hintStyle: TextStyle(color: Color.fromRGBO(255,255,255,0.3)),
                           ),
                           onSubmitted: (_) => _submitAnswer(),
                         ),
                         const SizedBox(height: 20),
-                        GradientButton(
+                        GlassButton(
                           text: 'Antwort abschicken',
                           icon: Icons.send,
                           onPressed: _submitAnswer,
+                          isFullWidth: true,
+                          gradientColors: const [Color(0xFFA855F7), Color(0xFFEC4899)],
                         ),
                       ],
                     ),
                   ),
-                ),
           const Spacer(),
           _buildAnsweredList(),
         ],
@@ -402,9 +433,9 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: hasAnswered ? AppTheme.accentGreen.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+            color: hasAnswered ? Color.fromRGBO(16,185,129,0.2) : Color.fromRGBO(255,255,255,0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: hasAnswered ? AppTheme.accentGreen : Colors.white.withOpacity(0.2)),
+            border: Border.all(color: hasAnswered ? AppTheme.accentGreen : Color.fromRGBO(255,255,255,0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -432,15 +463,20 @@ class _WaitingPhase extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          PulsingWidget(
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(gradient: AppTheme.primaryGradient, shape: BoxShape.circle),
-              child: const Icon(Icons.hourglass_empty, size: 48, color: Colors.white),
+          GlassCard(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryPurple),
+                ),
+                const SizedBox(width: 16),
+                Text('Warte auf alle Spieler...', style: TextStyle(color: Color.fromRGBO(255,255,255,0.8), fontSize: 16)),
+              ],
             ),
           ),
-          const SizedBox(height: 24),
-          const Text('Warte auf alle Spieler...', style: TextStyle(fontSize: 18)),
         ],
       ),
     );
@@ -489,23 +525,36 @@ class _VotingPhaseState extends State<_VotingPhase> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          FadeSlideTransition(
-            child: _PhaseHeader(
-              title: 'Abstimmung!',
-              subtitle: 'Wer hatte eine andere Frage?',
-              icon: Icons.how_to_vote,
-              color: AppTheme.accentRed,
-            ),
+          const _PhaseHeader(
+            title: 'Abstimmung!',
+            subtitle: 'Wer hatte eine andere Frage?',
+            icon: Icons.how_to_vote,
+            color: AppTheme.accentRed,
           ),
           const SizedBox(height: 16),
-          AnimatedCounter(value: votedCount, total: totalPlayers, label: 'haben gewählt', color: AppTheme.accentRed),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.accentRed.withAlpha(51),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.accentRed.withAlpha(102)),
+            ),
+            child: Text(
+              '$votedCount/$totalPlayers haben gewählt',
+              style: const TextStyle(
+                color: AppTheme.accentRed,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           GlassCard(
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Die Frage war:', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                Text('Die Frage war:', style: TextStyle(fontSize: 11, color: Color.fromRGBO(255,255,255,0.5))),
                 const SizedBox(height: 6),
                 Text(currentQuestion?.question ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
               ],
@@ -526,7 +575,7 @@ class _VotingPhaseState extends State<_VotingPhase> {
               ? Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.accentGreen.withOpacity(0.2),
+                    color: Color.fromRGBO(16,185,129,0.2),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Row(
@@ -538,11 +587,12 @@ class _VotingPhaseState extends State<_VotingPhase> {
                     ],
                   ),
                 )
-              : GradientButton(
+              : GlassButton(
                   text: 'Stimme abgeben',
                   icon: Icons.how_to_vote,
-                  gradient: AppTheme.liarGradient,
+                  gradientColors: const [Color(0xFFEF4444), Color(0xFFF59E0B)],
                   onPressed: _selectedPlayerId != null ? _submitVote : null,
+                  isFullWidth: true,
                 ),
         ],
       ),
@@ -559,13 +609,13 @@ class _VotingPhaseState extends State<_VotingPhase> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.accentRed.withOpacity(0.3) : isMe ? AppTheme.primaryPurple.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          color: isSelected ? Color.fromRGBO(239,68,68,0.3) : isMe ? Color.fromRGBO(124,58,237,0.1) : Color.fromRGBO(255,255,255,0.05),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isSelected ? AppTheme.accentRed : isMe ? AppTheme.primaryPurple.withOpacity(0.3) : Colors.transparent, width: 2),
+          border: Border.all(color: isSelected ? AppTheme.accentRed : isMe ? Color.fromRGBO(124,58,237,0.3) : Colors.transparent, width: 2),
         ),
         child: Row(
           children: [
-            PlayerAvatar(name: player.name, color: player.avatarColor, size: 40),
+            PlayerAvatar(player: player, radius: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -585,7 +635,7 @@ class _VotingPhaseState extends State<_VotingPhase> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(player.answer ?? '', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+                  Text(player.answer ?? '', style: TextStyle(color: Color.fromRGBO(255,255,255,0.7), fontSize: 13)),
                 ],
               ),
             ),
@@ -614,12 +664,10 @@ class _ResultsPhase extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          FadeSlideTransition(
-            child: _PhaseHeader(
-              title: 'Ergebnisse',
-              subtitle: 'Die Stimmen sind gezählt!',
-              icon: Icons.bar_chart,
-            ),
+          const _PhaseHeader(
+            title: 'Ergebnisse',
+            subtitle: 'Die Stimmen sind gezählt!',
+            icon: Icons.bar_chart,
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -628,24 +676,22 @@ class _ResultsPhase extends StatelessWidget {
               itemBuilder: (context, index) {
                 final player = room.players[index];
                 final votes = room.getVotesFor(player.id);
-                return FadeSlideTransition(
-                  delay: Duration(milliseconds: 100 * index),
-                  child: Container(
+                return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Color.fromRGBO(255,255,255,0.05),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
                       children: [
-                        PlayerAvatar(name: player.name, color: player.avatarColor, size: 44),
+                        PlayerAvatar(player: player, radius: 22),
                         const SizedBox(width: 14),
                         Expanded(child: Text(player.name, style: const TextStyle(fontWeight: FontWeight.w600))),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: votes > 0 ? AppTheme.accentRed.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                            color: votes > 0 ? Color.fromRGBO(239,68,68,0.2) : Color.fromRGBO(255,255,255,0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -655,17 +701,17 @@ class _ResultsPhase extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                );
+                  );
               },
             ),
           ),
           if (gameService.isHost)
-            GradientButton(
+            GlassButton(
               text: 'Lügner enthüllen',
               icon: Icons.visibility,
-              gradient: AppTheme.liarGradient,
+              gradientColors: const [Color(0xFFEF4444), Color(0xFFF59E0B)],
               onPressed: () => gameService.revealLiar(),
+              isFullWidth: true,
             ),
         ],
       ),
@@ -688,51 +734,62 @@ class _RevealPhase extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          FadeSlideTransition(
-            child: _PhaseHeader(
-              title: liarWasCaught ? 'Erwischt!' : 'Entkommen!',
-              subtitle: liarWasCaught ? 'Der Lügner wurde gefunden!' : 'Der Lügner ist entkommen!',
-              icon: liarWasCaught ? Icons.celebration : Icons.sentiment_very_dissatisfied,
-              color: liarWasCaught ? AppTheme.accentGreen : AppTheme.accentRed,
-            ),
+          _PhaseHeader(
+            title: liarWasCaught ? 'Erwischt!' : 'Entkommen!',
+            subtitle: liarWasCaught ? 'Der Lügner wurde gefunden!' : 'Der Lügner ist entkommen!',
+            icon: liarWasCaught ? Icons.celebration : Icons.sentiment_very_dissatisfied,
+            color: liarWasCaught ? AppTheme.accentGreen : AppTheme.accentRed,
           ),
           const Spacer(),
           if (liar != null)
-            FadeSlideTransition(
-              delay: const Duration(milliseconds: 300),
-              child: Column(
-                children: [
-                  PulsingWidget(
-                    child: PlayerAvatar(name: liar.name, color: liar.avatarColor, size: 100, isLiar: true, showBorder: true),
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.accentRed, width: 4),
                   ),
-                  const SizedBox(height: 20),
-                  const Text('Der Lügner war:', style: TextStyle(color: Colors.white54)),
-                  const SizedBox(height: 8),
-                  GradientText(
-                    text: liar.name,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                    gradient: AppTheme.liarGradient,
-                  ),
-                  const SizedBox(height: 24),
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Text('Die Lügner-Frage:', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5))),
-                        const SizedBox(height: 8),
-                        Text(room.liarQuestion?.question ?? '', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w500)),
-                      ],
+                  child: PlayerAvatar(player: liar, radius: 50),
+                ),
+                const SizedBox(height: 20),
+                const Text('Der Lügner war:', style: TextStyle(color: Colors.white54)),
+                const SizedBox(height: 8),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFF59E0B)],
+                  ).createShader(bounds),
+                  child: Text(
+                    liar.name,
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 24),
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Text('Die Lügner-Frage:', style: TextStyle(fontSize: 12, color: Color.fromRGBO(255,255,255,0.5))),
+                      const SizedBox(height: 8),
+                      Text(room.liarQuestion?.question ?? '', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ],
             ),
           const Spacer(),
           if (gameService.isHost) ...[
-            GradientButton(
+            GlassButton(
               text: 'Nochmal spielen',
               icon: Icons.replay,
               onPressed: () => gameService.playAgain(),
+              isFullWidth: true,
+              gradientColors: const [Color(0xFFA855F7), Color(0xFFEC4899)],
             ),
             const SizedBox(height: 12),
             GestureDetector(
@@ -747,15 +804,15 @@ class _RevealPhase extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  border: Border.all(color: Color.fromRGBO(255,255,255,0.3)),
                 ),
-                child: Center(child: Text('Beenden', style: TextStyle(color: Colors.white.withOpacity(0.7)))),
+                child: Center(child: Text('Beenden', style: TextStyle(color: Color.fromRGBO(255,255,255,0.7)))),
               ),
             ),
           ] else
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(14)),
+              decoration: BoxDecoration(color: Color.fromRGBO(255,255,255,0.05), borderRadius: BorderRadius.circular(14)),
               child: const Text('Warte auf den Host...'),
             ),
         ],

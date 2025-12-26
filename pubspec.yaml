@@ -13,19 +13,18 @@ dependencies:
   # Firebase for real-time multiplayer
   firebase_core: ^4.3.0
   firebase_database: ^12.1.1
-  
-  # QR Code generation
-  qr_flutter: ^4.1.0
-  
+    
   # State management
   provider: ^6.1.1
   
   # Utilities
   uuid: ^4.2.2
   sensors_plus: ^7.0.0
+  # JS interop for web sensor permission bridge
+  js: ^0.6.6
   
   # UI enhancements
-  cupertino_icons: ^1.0.6
+  # cupertino_icons removed (unused)
   google_fonts: ^6.1.0
   audioplayers: ^6.5.1
 

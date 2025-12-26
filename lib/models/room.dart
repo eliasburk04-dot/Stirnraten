@@ -100,7 +100,7 @@ class Room {
 
     final scoresMap = map['scores'] as Map<dynamic, dynamic>? ?? {};
     final scores = scoresMap.map((key, value) => 
-        MapEntry(key.toString(), value as int));
+        MapEntry(key.toString(), value as int),);
 
     return Room(
       id: map['id'] as String,

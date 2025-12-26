@@ -389,7 +389,7 @@ Question getRandomQuestion() {
 /// Both questions will be from the SAME category to make it fair but challenging
 Map<String, Question> getQuestionPair() {
   // 1. Pick a random category
-  final categories = QuestionCategory.values;
+  const categories = QuestionCategory.values;
   final randomCategory = categories[Random().nextInt(categories.length)];
   
   // 2. Get all questions from that category

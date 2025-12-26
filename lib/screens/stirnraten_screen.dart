@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +9,7 @@ import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
 import '../utils/sensor_helper.dart';
 import '../data/words.dart';
-import '../utils/theme.dart';
-import '../widgets/animated_widgets.dart';
+import '../widgets/glass_widgets.dart';
 
 enum StirnratenGameState { setup, countdown, playing, result }
 
@@ -34,14 +35,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   bool _canSkip = true;
   bool _neutralPosition = true;
+  DateTime _lastSensorProcessing = DateTime.now();
+  static const Duration _sensorThrottle = Duration(milliseconds: 50);
   
   // Feedback
   Color? _feedbackColor;
   Timer? _feedbackTimer;
-  
-  // Tilt detection thresholds
-  static const double _tiltThreshold = 7.0; // Gravity component on Z axis
-  static const double _neutralThreshold = 7.0; // Gravity component on X axis (landscape)
 
   @override
   void dispose() {
@@ -49,6 +48,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _countdownTimer?.cancel();
     _feedbackTimer?.cancel();
     _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
+    
+    if (kDebugMode) {
+      debugPrint('🎮 Stirnraten: Sensors cleaned up');
+    }
+    
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -89,16 +94,25 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _startGame() {
+    if (kDebugMode) {
+      debugPrint('🎮 Stirnraten: Game starting...');
+    }
+    
     setState(() {
       _gameState = StirnratenGameState.playing;
       _canSkip = true;
       _neutralPosition = true;
+      _feedbackColor = null; // Reset any lingering feedback
     });
 
     context.read<SoundService>().playStart();
     _nextWord();
     _startTimer();
     _startSensors();
+    
+    if (kDebugMode) {
+      debugPrint('✅ Stirnraten: Game started successfully');
+    }
   }
 
   void _startTimer() {
@@ -112,54 +126,104 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _startSensors() {
-    // Try standard sensors_plus first
-    _accelerometerSubscription = accelerometerEvents.listen((AccelerometerEvent event) {
-      _processSensorData(event.x, event.y, event.z);
-    });
+    // Cancel existing subscription if any
+    _accelerometerSubscription?.cancel();
+    
+    if (kDebugMode) {
+      debugPrint('🎮 Stirnraten: Starting sensor listeners...');
+      if (!kIsWeb) {
+        try {
+          final platform = Platform.operatingSystem;
+          debugPrint('📱 Platform: $platform');
+        } catch (e) {
+          debugPrint('⚠️ Platform detection failed: $e');
+        }
+      }
+    }
+    
+    // Mobile-optimized sensor stream configuration
+    _accelerometerSubscription = accelerometerEventStream().listen(
+      (AccelerometerEvent event) {
+        _processSensorData(event.x, event.y, event.z);
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('⚠️ Sensor error: $error');
+        }
+      },
+      cancelOnError: false,
+    );
 
-    // Fallback for Web if sensors_plus returns 0s (common issue on some browsers/permissions)
+    // Web fallback (sekundär)
     if (kIsWeb) {
       Timer.periodic(const Duration(milliseconds: 100), (timer) {
         if (_gameState != StirnratenGameState.playing) {
           timer.cancel();
           return;
         }
-        // Check if standard sensors are working (giving non-zero values)
-        // If they are mostly 0, try the JS fallback
-        // Note: We can't easily know if 0 is real or error, but exact 0.0 on all axes is rare in hand
         
         final webData = getWebAccelerometerData();
-        // If we get data from JS, use it
         if (webData[0] != 0 || webData[1] != 0 || webData[2] != 0) {
            _processSensorData(webData[0], webData[1], webData[2]);
         }
       });
     }
+    
+    if (kDebugMode) {
+      debugPrint('✅ Sensor listeners activated');
+    }
   }
 
   void _processSensorData(double x, double y, double z) {
-      if (_gameState != StirnratenGameState.playing) return;
+    if (_gameState != StirnratenGameState.playing || !_canSkip) return;
 
-      // Check for Neutral Position (Phone vertical on forehead)
-      if (x.abs() > _neutralThreshold) {
-        _neutralPosition = true;
+    // Throttle: Process sensor data max every 50ms
+    final now = DateTime.now();
+    if (now.difference(_lastSensorProcessing) < _sensorThrottle) return;
+    _lastSensorProcessing = now;
+
+    // Adaptive Thresholds: Mobile-Geräte haben oft andere Sensitivität
+    // Y-Achse für Landscape-Modus: Kippen nach vorne (positiv) oder hinten (negativ)
+    const bool isMobile = !kIsWeb;
+    
+    // Mobile: Etwas höhere Thresholds für stabilere Erkennung
+    // Web: Niedrigere Thresholds (wie vorher)
+    const double tiltThreshold = isMobile ? 7.0 : 6.0;
+    const double neutralThreshold = isMobile ? 5.0 : 4.0;
+
+    // Debug-Logging (nur alle 500ms um nicht zu spammen)
+    if (kDebugMode && now.millisecondsSinceEpoch % 500 < 50) {
+      const platform = isMobile ? '📱' : '🌐';
+      debugPrint('$platform Sensor: x=${x.toStringAsFixed(1)}, y=${y.toStringAsFixed(1)}, z=${z.toStringAsFixed(1)} | Neutral: $_neutralPosition | Thresholds: tilt=$tiltThreshold, neutral=$neutralThreshold');
+    }
+
+    // Neutral Position erkennen
+    if (y.abs() < neutralThreshold) {
+      if (!_neutralPosition && kDebugMode) {
+        debugPrint('✅ Neutral position restored');
       }
+      _neutralPosition = true;
+      return;
+    }
 
-      if (!_canSkip || !_neutralPosition) return;
+    if (!_neutralPosition) return;
 
-      // Check for Tilt
-      if (x.abs() < 5.0) {
-        // Face Down (Pass)
-        if (z < -_tiltThreshold) {
-          _neutralPosition = false;
-          _handlePass();
-        }
-        // Face Up (Correct)
-        else if (z > _tiltThreshold) {
-          _neutralPosition = false;
-          _handleCorrect();
-        }
+    // Kippen nach vorne (y > threshold) = Richtig
+    if (y > tiltThreshold) {
+      if (kDebugMode) {
+        debugPrint('🟢 CORRECT detected! y=${y.toStringAsFixed(1)}');
       }
+      _neutralPosition = false;
+      _handleCorrect();
+    }
+    // Kippen nach hinten (y < -threshold) = Überspringen
+    else if (y < -tiltThreshold) {
+      if (kDebugMode) {
+        debugPrint('🔴 PASS detected! y=${y.toStringAsFixed(1)}');
+      }
+      _neutralPosition = false;
+      _handlePass();
+    }
   }
 
   void _nextWord() {
@@ -174,41 +238,76 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
   void _handleCorrect() {
     if (!_canSkip) return;
-    _debounce();
-    HapticFeedback.heavyImpact();
+    _canSkip = false;
     
-    context.read<SoundService>().playCorrect();
+    if (kDebugMode) {
+      debugPrint('✅ CORRECT action triggered');
+    }
     
     setState(() {
       _score++;
       _results.add({'word': _currentWord, 'correct': true});
     });
 
-    _showFeedback(Colors.green.withOpacity(0.8), onFinished: () {
-      _nextWord();
+    // Haptic + Sound + Feedback in perfekter Synchronisation
+    HapticFeedback.heavyImpact();
+    
+    // Sound-Aufruf non-blocking für bessere Performance
+    context.read<SoundService>().playCorrect().then((_) {
+      if (kDebugMode) {
+        debugPrint('🔊 Correct sound played');
+      }
+    }).catchError((e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Sound error: $e');
+      }
     });
+    
+    _showFeedback(
+      const Color(0xDD10B981), // Grün mit höherer Deckkraft für bessere Sichtbarkeit
+      onFinished: () {
+        _nextWord();
+        _canSkip = true;
+        if (kDebugMode) {
+          debugPrint('🔄 Ready for next word');
+        }
+      },
+    );
   }
 
   void _handlePass() {
     if (!_canSkip) return;
-    _debounce();
+    _canSkip = false;
     
-    context.read<SoundService>().playWrong();
+    if (kDebugMode) {
+      debugPrint('➡️ PASS action triggered');
+    }
     
     setState(() {
       _results.add({'word': _currentWord, 'correct': false});
     });
 
-    _showFeedback(Colors.red.withOpacity(0.8), onFinished: () {
-      _nextWord();
+    // Sound für 'Pass' bewusst softer (kein Haptic Feedback)
+    context.read<SoundService>().playWrong().then((_) {
+      if (kDebugMode) {
+        debugPrint('🔊 Wrong sound played');
+      }
+    }).catchError((e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Sound error: $e');
+      }
     });
-  }
-
-  void _debounce() {
-    _canSkip = false;
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) setState(() => _canSkip = true);
-    });
+    
+    _showFeedback(
+      const Color(0xCCEF4444), // Rot mit etwas geringerer Deckkraft (softer)
+      onFinished: () {
+        _nextWord();
+        _canSkip = true;
+        if (kDebugMode) {
+          print('🔄 Ready for next word');
+        }
+      },
+    );
   }
   
   void _showFeedback(Color color, {VoidCallback? onFinished}) {
@@ -240,9 +339,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundDark,
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.backgroundGradient),
+      body: ModernBackground(
         child: _buildBody(),
       ),
     );
@@ -263,26 +360,31 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   
   Widget _buildCountdown() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$_countdown',
-            style: const TextStyle(
-              fontSize: 120,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+      child: GlassCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$_countdown',
+              style: const TextStyle(
+                fontSize: 120,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                letterSpacing: -2,
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Handy an die Stirn!',
-            style: TextStyle(
-              fontSize: 24,
-              color: Colors.white70,
+            const SizedBox(height: 24),
+            const Text(
+              'Handy an die Stirn!',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: Color(0xB3FFFFFF),
+                letterSpacing: 0.3,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -291,49 +393,53 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     return SafeArea(
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.phone_iphone, size: 64, color: Colors.white),
-              const SizedBox(height: 24),
-              Text(
-                'STIRNRATEN',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+              const Text(
+                'Stirnraten',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
                   color: Colors.white,
-                  letterSpacing: 4,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Wähle eine Kategorie',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0x8CFFFFFF),
+                  letterSpacing: 0.3,
                 ),
               ),
               const SizedBox(height: 48),
-              Text(
-                'Wähle eine Kategorie:',
-                style: TextStyle(fontSize: 18, color: Colors.white.withOpacity(0.7)),
-              ),
-              const SizedBox(height: 24),
-              ...StirnratenCategory.values.map((category) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: GradientButton(
-                    text: StirnratenData.categoryNames[category]!,
-                    onPressed: () => _startCountdown(category),
-                    gradient: LinearGradient(
-                      colors: [
-                        _getCategoryColor(category),
-                        _getCategoryColor(category).withOpacity(0.7),
-                      ],
-                    ),
+              ...StirnratenCategory.values.map((category) {
+                final colors = _getCategoryGradient(category);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _CategoryCard(
+                    title: StirnratenData.categoryNames[category]!,
+                    gradientColors: colors,
+                    onTap: () => _startCountdown(category),
                   ),
-                ),
-              )),
-              const SizedBox(height: 40),
-              TextButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: Icon(Icons.arrow_back, color: Colors.white.withOpacity(0.5)),
-                label: Text(
-                  'Zurück zum Hauptmenü',
-                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                );
+              }),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Text(
+                  '← Zurück',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0x8CFFFFFF),
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
             ],
@@ -343,26 +449,62 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     );
   }
 
-  Color _getCategoryColor(StirnratenCategory category) {
+  List<Color> _getCategoryGradient(StirnratenCategory category) {
     switch (category) {
       case StirnratenCategory.anime:
-        return AppTheme.accentRed;
+        return [const Color(0xFFEF4444), const Color(0xFFF59E0B)];
       case StirnratenCategory.starWars:
-        return const Color(0xFFF1C40F);
+        return [const Color(0xFFF59E0B), const Color(0xFFF1C40F)];
       case StirnratenCategory.custom:
-        return const Color(0xFF8E44AD);
+        return [const Color(0xFF8E44AD), const Color(0xFF9B59B6)];
+      case StirnratenCategory.films:
+        return [const Color(0xFF10B981), const Color(0xFF059669)];
+      case StirnratenCategory.series:
+        return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
+      case StirnratenCategory.music:
+        return [const Color(0xFF9B59B6), const Color(0xFF8B5CF6)];
+      case StirnratenCategory.celebrities:
+        return [const Color(0xFFE67E22), const Color(0xFFD97706)];
+      case StirnratenCategory.animals:
+        return [const Color(0xFF16A085), const Color(0xFF14B8A6)];
+      case StirnratenCategory.food:
+        return [const Color(0xFFE74C3C), const Color(0xFFDC2626)];
+      case StirnratenCategory.places:
+        return [const Color(0xFF64748B), const Color(0xFF475569)];
+      case StirnratenCategory.jobs:
+        return [const Color(0xFF7F8C8D), const Color(0xFF6B7280)];
+      case StirnratenCategory.tech:
+        return [const Color(0xFF06B6D4), const Color(0xFF0891B2)];
+      case StirnratenCategory.sports:
+        return [const Color(0xFF22C55E), const Color(0xFF16A34A)];
+      case StirnratenCategory.kids:
+        return [const Color(0xFFF59E0B), const Color(0xFFFBBF24)];
+      case StirnratenCategory.mythology:
+        return [const Color(0xFF8E44AD), const Color(0xFF7C3AED)];
+      case StirnratenCategory.plants:
+        return [const Color(0xFF10B981), const Color(0xFF10B981)];
+      default:
+        return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
     }
   }
 
   Widget _buildGame() {
     return Stack(
       children: [
-        Container(color: AppTheme.primaryBlue),
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF1E293B),
+                Color(0xFF0F172A),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
         
-        // Feedback Overlay
-        if (_feedbackColor != null)
-          Container(color: _feedbackColor),
-        
+        // Touch controls - Links überspringen, Rechts richtig
         Row(
           children: [
             Expanded(
@@ -371,9 +513,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 behavior: HitTestBehavior.translucent,
                 child: Container(
                   color: Colors.transparent,
-                  child: Center(
-                    child: Icon(Icons.close, size: 100, color: Colors.white.withOpacity(0.1)),
-                  ),
                 ),
               ),
             ),
@@ -383,9 +522,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 behavior: HitTestBehavior.translucent,
                 child: Container(
                   color: Colors.transparent,
-                  child: Center(
-                    child: Icon(Icons.check, size: 100, color: Colors.white.withOpacity(0.1)),
-                  ),
                 ),
               ),
             ),
@@ -408,102 +544,264 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         ),
 
         Positioned(
-          top: 20,
-          right: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$_timeLeft',
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+          top: 40,
+          right: 28,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(20),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withAlpha(40),
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  '$_timeLeft',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
 
         const Positioned(
-          bottom: 20,
+          bottom: 40,
           left: 0,
           right: 0,
           child: Text(
-            'Links tippen: Passen  |  Rechts tippen: Richtig\nOder Gerät kippen!',
+            'Tippen oder kippen',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 16),
+            style: TextStyle(
+              color: Color(0x80FFFFFF),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
           ),
         ),
+
+        // Feedback Overlay - MUSS ZULETZT IM STACK SEIN für höchste Z-Order
+        if (_feedbackColor != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: 0.85,
+                duration: const Duration(milliseconds: 150),
+                child: Container(
+                  color: _feedbackColor!,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
 
   Widget _buildResult() {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            const Text(
-              'Zeit abgelaufen!',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '$_score Punkte',
-              style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: AppTheme.accentOrange),
-            ),
-            const SizedBox(height: 30),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.cardDark,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _results.length,
-                  separatorBuilder: (context, index) => const Divider(color: Colors.white10),
-                  itemBuilder: (context, index) {
-                    final result = _results[index];
-                    return ListTile(
-                      leading: Icon(
-                        result['correct'] ? Icons.check_circle : Icons.cancel,
-                        color: result['correct'] ? AppTheme.accentGreen : AppTheme.accentRed,
-                      ),
-                      title: Text(
-                        result['word'],
-                        style: const TextStyle(color: Colors.white, fontSize: 18),
-                      ),
-                    );
-                  },
+      child: Center(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Zeit abgelaufen!',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: GradientButton(
+              const SizedBox(height: 16),
+              Text(
+                '$_score',
+                style: const TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFF59E0B),
+                  letterSpacing: -2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _score == 1 ? 'Punkt' : 'Punkte',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withAlpha(140),
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 48),
+              if (_results.isNotEmpty)
+                GlassCard(
+                  child: Column(
+                    children: [
+                      ...List.generate(_results.length.clamp(0, 10), (index) {
+                        final result = _results[index];
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index < _results.length - 1 ? 16 : 0,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                result['correct']
+                                    ? Icons.check_circle
+                                    : Icons.cancel,
+                                color: result['correct']
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFEF4444),
+                                size: 24,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  result['word'],
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      if (_results.length > 10) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          '+ ${_results.length - 10} weitere',
+                          style: TextStyle(
+                            color: Colors.white.withAlpha(128),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 32),
+              GlassButton(
                 text: 'Nochmal spielen',
+                isFullWidth: true,
+                gradientColors: const [
+                  Color(0xFFEF4444),
+                  Color(0xFFF59E0B),
+                ],
                 onPressed: () {
                   setState(() {
                     _gameState = StirnratenGameState.setup;
                   });
                 },
               ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Zurück zum Hauptmenü',
-                style: TextStyle(color: Colors.white.withOpacity(0.5)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Zurück zum Hauptmenü',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                            color: Color(0x8CFFFFFF),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+class _CategoryCard extends StatefulWidget {
+  final String title;
+  final List<Color> gradientColors;
+  final VoidCallback onTap;
+
+  const _CategoryCard({
+    required this.title,
+    required this.gradientColors,
+    required this.onTap,
+  });
+
+  @override
+  State<_CategoryCard> createState() => _CategoryCardState();
+}
+
+class _CategoryCardState extends State<_CategoryCard> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    widget.gradientColors[0].withAlpha(51),
+                    widget.gradientColors[1].withAlpha(26),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: widget.gradientColors[0].withAlpha(102),
+                  width: 1.5,
+                ),
+              ),
+              child: Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

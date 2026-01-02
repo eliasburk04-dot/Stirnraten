@@ -391,60 +391,80 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
   Widget _buildSetup() {
     return SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Stirnraten',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ),
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+              child: Column(
+                children: [
+                  const Text(
+                    'Stirnraten',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Wähle eine Kategorie',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0x8CFFFFFF),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Wähle eine Kategorie',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: Color(0x8CFFFFFF),
-                  letterSpacing: 0.3,
-                ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 1.0,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
-              const SizedBox(height: 48),
-              ...StirnratenCategory.values.map((category) {
-                final colors = _getCategoryGradient(category);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _CategoryCard(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final category = StirnratenCategory.values[index];
+                  final colors = _getCategoryGradient(category);
+                  return _CategoryCard(
                     title: StirnratenData.categoryNames[category]!,
                     gradientColors: colors,
                     onTap: () => _startCountdown(category),
-                  ),
-                );
-              }),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: const Text(
-                  '← Zurück',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0x8CFFFFFF),
-                    letterSpacing: 0.3,
+                  );
+                },
+                childCount: StirnratenCategory.values.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Text(
+                    '← Zurück',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0x8CFFFFFF),
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -455,8 +475,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         return [const Color(0xFFEF4444), const Color(0xFFF59E0B)];
       case StirnratenCategory.starWars:
         return [const Color(0xFFF59E0B), const Color(0xFFF1C40F)];
-      case StirnratenCategory.custom:
-        return [const Color(0xFF8E44AD), const Color(0xFF9B59B6)];
       case StirnratenCategory.films:
         return [const Color(0xFF10B981), const Color(0xFF059669)];
       case StirnratenCategory.series:
@@ -483,6 +501,38 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         return [const Color(0xFF8E44AD), const Color(0xFF7C3AED)];
       case StirnratenCategory.plants:
         return [const Color(0xFF10B981), const Color(0xFF10B981)];
+      case StirnratenCategory.videogames:
+        return [const Color(0xFF8B5CF6), const Color(0xFF6366F1)];
+      case StirnratenCategory.superheroes:
+        return [const Color(0xFFEF4444), const Color(0xFF3B82F6)];
+      case StirnratenCategory.disney:
+        return [const Color(0xFF3B82F6), const Color(0xFF60A5FA)];
+      case StirnratenCategory.youtubers:
+        return [const Color(0xFFFF0000), const Color(0xFFFF4444)];
+      case StirnratenCategory.brands:
+        return [const Color(0xFF1F2937), const Color(0xFF4B5563)];
+      case StirnratenCategory.nineties:
+        return [const Color(0xFFEC4899), const Color(0xFF8B5CF6)];
+      case StirnratenCategory.twoThousands:
+        return [const Color(0xFF06B6D4), const Color(0xFF3B82F6)];
+      case StirnratenCategory.history:
+        return [const Color(0xFFD97706), const Color(0xFFB45309)];
+      case StirnratenCategory.pantomime:
+        return [const Color(0xFF10B981), const Color(0xFF34D399)];
+      case StirnratenCategory.noises:
+        return [const Color(0xFFF59E0B), const Color(0xFFFCD34D)];
+      case StirnratenCategory.household:
+        return [const Color(0xFF6B7280), const Color(0xFF9CA3AF)];
+      case StirnratenCategory.bodyParts:
+        return [const Color(0xFFEC4899), const Color(0xFFF472B6)];
+      case StirnratenCategory.books:
+        return [const Color(0xFF8B5CF6), const Color(0xFFA78BFA)];
+      case StirnratenCategory.cities:
+        return [const Color(0xFF3B82F6), const Color(0xFF60A5FA)];
+      case StirnratenCategory.festivals:
+        return [const Color(0xFFF59E0B), const Color(0xFFFCD34D)];
+      case StirnratenCategory.feelings:
+        return [const Color(0xFFEF4444), const Color(0xFFF87171)];
       default:
         return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
     }
@@ -763,7 +813,7 @@ class _CategoryCardState extends State<_CategoryCard> {
       },
       onTapCancel: () => setState(() => _isPressed = false),
       child: AnimatedScale(
-        scale: _isPressed ? 0.97 : 1.0,
+        scale: _isPressed ? 0.95 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: ClipRRect(
@@ -771,8 +821,6 @@ class _CategoryCardState extends State<_CategoryCard> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
             child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -788,14 +836,21 @@ class _CategoryCardState extends State<_CategoryCard> {
                   width: 1.5,
                 ),
               ),
-              child: Text(
-                widget.title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.2,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    widget.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
                 ),
               ),
             ),

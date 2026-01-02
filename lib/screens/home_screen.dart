@@ -1,8 +1,29 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'liar_start_screen.dart';
 import 'stirnraten_screen.dart';
+import '../utils/theme.dart';
+
+class GameData {
+  final String title;
+  final String description;
+  final String? imagePath;
+  final String emoji;
+  final List<Color> gradientColors;
+  final Widget screen;
+
+  GameData({
+    required this.title,
+    required this.description,
+    this.imagePath,
+    required this.emoji,
+    required this.gradientColors,
+    required this.screen,
+  });
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,332 +33,262 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  late AnimationController _rotateController;
+  late PageController _pageController;
+  int _currentPage = 0;
+  double _pageValue = 0.0;
+
+  late final List<GameData> _games;
+  late AnimationController _backgroundAnimController;
 
   @override
   void initState() {
     super.initState();
-    _rotateController = AnimationController(
-      duration: const Duration(seconds: 30),
+    _games = [
+      GameData(
+        title: 'Lügner',
+        description: 'Finde den Lügner! Ein Spieler kennt das Geheimnis nicht.',
+        imagePath: 'assets/images/Lügner_image.png',
+        emoji: '🎭',
+        gradientColors: const [Color(0xFF7C3AED), Color(0xFFEC4899)],
+        screen: const LiarStartScreen(),
+      ),
+      GameData(
+        title: 'Stirnraten',
+        description: 'Rate das Wort auf deiner Stirn mit Hilfe deiner Freunde.',
+        imagePath: 'assets/images/stirnraten_image.png',
+        emoji: '🤔',
+        gradientColors: const [Color(0xFFEF4444), Color(0xFFF59E0B)],
+        screen: const StirnratenScreen(),
+      ),
+    ];
+
+    _pageController = PageController(viewportFraction: 0.75);
+    _pageController.addListener(() {
+      setState(() {
+        _pageValue = _pageController.page ?? 0.0;
+      });
+    });
+
+    _backgroundAnimController = AnimationController(
+      duration: const Duration(seconds: 10),
       vsync: this,
-    )..repeat();
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _rotateController.dispose();
+    _pageController.dispose();
+    _backgroundAnimController.dispose();
     super.dispose();
+  }
+
+  void _onGameSelected(int index) {
+    HapticFeedback.mediumImpact();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => _games[index].screen),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF0A0A12),
-              Color(0xFF14141E),
-              Color(0xFF1A1A28),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Stack(
-          children: [
-            _buildBackgroundEffects(),
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildHeader(),
-                      const SizedBox(height: 80),
-                      GameCard(
-                        title: 'Lügner',
-                        subtitle: 'Social Deception Game',
-                        emoji: '🎭',
-                        gradientColors: const [
-                          Color(0xFF7C3AED),
-                          Color(0xFFEC4899),
-                        ],
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LiarStartScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      GameCard(
-                        title: 'Stirnraten',
-                        subtitle: 'Heads Up Challenge',
-                        emoji: '🤔',
-                        gradientColors: const [
-                          Color(0xFFEF4444),
-                          Color(0xFFF59E0B),
-                        ],
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const StirnratenScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+      backgroundColor: const Color(0xFF0F0F1A),
+      body: Stack(
+        children: [
+          // 1. Dynamic Background
+          _buildAnimatedBackground(),
+          
+          // 2. Content
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    onPageChanged: (index) {
+                      setState(() => _currentPage = index);
+                      HapticFeedback.selectionClick();
+                    },
+                    itemCount: _games.length,
+                    physics: const BouncingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      return _buildGameCard(index);
+                    },
                   ),
                 ),
-              ),
+                const SizedBox(height: 20),
+                _buildPageIndicators(),
+                const SizedBox(height: 30),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildBackgroundEffects() {
-    return Stack(
-      children: [
-        Positioned(
-          top: -120,
-          right: -120,
-          child: AnimatedBuilder(
-            animation: _rotateController,
-            builder: (context, child) {
-              return Transform.rotate(
-                angle: _rotateController.value * 2 * math.pi,
-                child: Container(
-                  width: 350,
-                  height: 350,
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      colors: [
-                        const Color(0xFF7C3AED).withAlpha(26),
-                        Colors.transparent,
-                      ],
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              );
-            },
-          ),
+  Widget _buildAnimatedBackground() {
+    final currentColors = _games[_currentPage].gradientColors;
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 500),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF0F0F1A),
+            currentColors[0].withOpacity(0.4),
+            currentColors[1].withOpacity(0.2),
+            const Color(0xFF0F0F1A),
+          ],
+          stops: const [0.0, 0.3, 0.7, 1.0],
         ),
-        Positioned(
-          bottom: -80,
-          left: -80,
-          child: Container(
-            width: 280,
-            height: 280,
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                colors: [
-                  const Color(0xFFEC4899).withAlpha(20),
-                  Colors.transparent,
-                ],
-              ),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-      ],
+      ),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+        child: Container(color: Colors.transparent),
+      ),
     );
   }
 
   Widget _buildHeader() {
-    return Column(
-      children: [
-        Text(
-          'Party Games',
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                fontSize: 32,
-                letterSpacing: -0.5,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                height: 1.2,
-              ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Choose your game',
-          style: TextStyle(
-            fontSize: 16,
-            letterSpacing: 0.5,
-            fontWeight: FontWeight.w400,
-            color: Colors.white.withAlpha(140),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Let\'s Play',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              color: Colors.white70,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 1.2,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            'Choose a Game',
+            style: GoogleFonts.poppins(
+              fontSize: 28,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
-}
 
-class GameCard extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final String emoji;
-  final List<Color> gradientColors;
-  final VoidCallback onTap;
+  Widget _buildGameCard(int index) {
+    double percent = (_pageValue - index);
+    double scale = (1 - (percent.abs() * 0.1)).clamp(0.85, 1.0);
+    double opacity = (1 - (percent.abs() * 0.5)).clamp(0.5, 1.0);
+    double verticalOffset = percent.abs() * 20;
 
-  const GameCard({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.emoji,
-    required this.gradientColors,
-    required this.onTap,
-  });
+    final game = _games[index];
 
-  @override
-  State<GameCard> createState() => _GameCardState();
-}
-
-class _GameCardState extends State<GameCard> {
-  bool _isPressed = false;
-
-  void _handleTapDown(TapDownDetails details) {
-    setState(() => _isPressed = true);
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    setState(() => _isPressed = false);
-    widget.onTap();
-  }
-
-  void _handleTapCancel() {
-    setState(() => _isPressed = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      child: AnimatedScale(
-        scale: _isPressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        child: Container(
-          height: 180,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: widget.gradientColors[0].withAlpha(40),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
+    return Transform.translate(
+      offset: Offset(0, verticalOffset),
+      child: Transform.scale(
+        scale: scale,
+        child: Opacity(
+          opacity: opacity,
+          child: GestureDetector(
+            onTap: () => _onGameSelected(index),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: [
+                  BoxShadow(
+                    color: game.gradientColors[0].withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                    spreadRadius: -5,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withAlpha(15),
-                      Colors.white.withAlpha(8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withAlpha(25),
-                    width: 1.5,
-                  ),
-                ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Positioned(
-                      top: -40,
-                      right: -40,
+                    // 1. Full Screen Illustration/Background
+                    _buildGameIllustration(game),
+
+                    // 2. Glass/Gradient Overlay for Text Readability
+                    Positioned.fill(
                       child: Container(
-                        width: 160,
-                        height: 160,
                         decoration: BoxDecoration(
-                          gradient: RadialGradient(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
                             colors: [
-                              widget.gradientColors[0].withAlpha(51),
                               Colors.transparent,
+                              Colors.black.withOpacity(0.0),
+                              Colors.black.withOpacity(0.6),
+                              Colors.black.withOpacity(0.9),
                             ],
+                            stops: const [0.0, 0.4, 0.7, 1.0],
                           ),
-                          shape: BoxShape.circle,
                         ),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(28),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: widget.gradientColors,
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                    
+                    // 3. Card Content (Text & Button)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              game.title,
+                              style: GoogleFonts.poppins(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                height: 1.1,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
                                   ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: widget.gradientColors[0].withAlpha(77),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    widget.emoji,
-                                    style: const TextStyle(fontSize: 28),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              game.description,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                                height: 1.5,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.5),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.title,
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
-                                  height: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                widget.subtitle,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w400,
-                                  color: Colors.white.withAlpha(153),
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 24),
+                            _buildPlayButton(game),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -347,6 +298,133 @@ class _GameCardState extends State<GameCard> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGameIllustration(GameData game) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Background Gradient
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                game.gradientColors[0].withOpacity(0.6),
+                game.gradientColors[1].withOpacity(0.4),
+              ],
+            ),
+          ),
+        ),
+        
+        // Decorative Circles
+        Positioned(
+          top: -50,
+          right: -50,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: game.gradientColors[1].withOpacity(0.3),
+              boxShadow: [
+                BoxShadow(
+                  color: game.gradientColors[1].withOpacity(0.5),
+                  blurRadius: 60,
+                  spreadRadius: 10,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Main Image or Emoji
+        if (game.imagePath != null)
+          Image.asset(
+            game.imagePath!,
+            fit: BoxFit.cover,
+            errorBuilder: (c, o, s) => Center(child: _buildEmoji(game)),
+          )
+        else
+          Center(child: _buildEmoji(game)),
+      ],
+    );
+  }
+
+  Widget _buildEmoji(GameData game) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: game.gradientColors[0].withOpacity(0.5),
+            blurRadius: 60,
+            spreadRadius: -10,
+          ),
+        ],
+      ),
+      child: Text(
+        game.emoji,
+        style: const TextStyle(fontSize: 80),
+      ),
+    );
+  }
+
+  Widget _buildPlayButton(GameData game) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: game.gradientColors,
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: game.gradientColors[0].withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          'PLAY NOW',
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageIndicators() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(_games.length, (index) {
+        double selectedness = (1 - (_pageValue - index).abs()).clamp(0.0, 1.0);
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          height: 8,
+          width: 8 + (16 * selectedness),
+          decoration: BoxDecoration(
+            color: Color.lerp(
+              Colors.white24,
+              _games[index].gradientColors[0],
+              selectedness,
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+      }),
     );
   }
 }

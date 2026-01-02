@@ -3,7 +3,6 @@
 enum StirnratenCategory {
   anime,
   starWars,
-  custom,
   films,
   series,
   music,
@@ -17,27 +16,58 @@ enum StirnratenCategory {
   kids,
   mythology,
   plants,
+  videogames,
+  superheroes,
+  disney,
+  youtubers,
+  brands,
+  nineties,
+  twoThousands,
+  history,
+  pantomime,
+  noises,
+  household,
+  bodyParts,
+  books,
+  cities,
+  festivals,
+  feelings,
 }
 
 /// Data class for Stirnraten words
 class StirnratenData {
   static const Map<StirnratenCategory, String> categoryNames = {
-    StirnratenCategory.anime: 'Anime Edition',
+    StirnratenCategory.anime: 'Anime',
     StirnratenCategory.starWars: 'Star Wars',
-    StirnratenCategory.custom: 'Eigene Wörter',
-    StirnratenCategory.films: 'Film & Kino',
-    StirnratenCategory.series: 'Serien & TV',
-    StirnratenCategory.music: 'Musik & Bands',
-    StirnratenCategory.celebrities: 'Prominente',
+    StirnratenCategory.films: 'Filme',
+    StirnratenCategory.series: 'Serien',
+    StirnratenCategory.music: 'Musik',
+    StirnratenCategory.celebrities: 'Promis',
     StirnratenCategory.animals: 'Tiere',
-    StirnratenCategory.food: 'Essen & Getränke',
-    StirnratenCategory.places: 'Orte & Länder',
+    StirnratenCategory.food: 'Essen',
+    StirnratenCategory.places: 'Orte',
     StirnratenCategory.jobs: 'Berufe',
-    StirnratenCategory.tech: 'Technik & Gadgets',
-    StirnratenCategory.sports: 'Sport & Spiele',
-    StirnratenCategory.kids: 'Kinder & Kinderserien',
-    StirnratenCategory.mythology: 'Mythologie & Fantasy',
-    StirnratenCategory.plants: 'Pflanzen & Natur',
+    StirnratenCategory.tech: 'Technik',
+    StirnratenCategory.sports: 'Sport',
+    StirnratenCategory.kids: 'Kinder',
+    StirnratenCategory.mythology: 'Mythen',
+    StirnratenCategory.plants: 'Natur',
+    StirnratenCategory.videogames: 'Gaming',
+    StirnratenCategory.superheroes: 'Helden',
+    StirnratenCategory.disney: 'Disney',
+    StirnratenCategory.youtubers: 'YouTuber',
+    StirnratenCategory.brands: 'Marken',
+    StirnratenCategory.nineties: '90er',
+    StirnratenCategory.twoThousands: '2000er',
+    StirnratenCategory.history: 'Historisch',
+    StirnratenCategory.pantomime: 'Pantomime',
+    StirnratenCategory.noises: 'Geräusche',
+    StirnratenCategory.household: 'Haushalt',
+    StirnratenCategory.bodyParts: 'Körper',
+    StirnratenCategory.books: 'Bücher',
+    StirnratenCategory.cities: 'Städte',
+    StirnratenCategory.festivals: 'Feste',
+    StirnratenCategory.feelings: 'Gefühle',
   };
 
   static const Map<StirnratenCategory, List<String>> words = {
@@ -66,10 +96,6 @@ class StirnratenData {
       "BB-8", "Jango Fett", "Poe Dameron", "Finn", "Rose Tico",
     ],
 
-    StirnratenCategory.custom: [
-      "C8", "Monster White", "Dein Vater", "Clash Royale", "Wlan",
-    ],
-
     StirnratenCategory.films: [
       "Titanic", "The Matrix", "Forrest Gump", "Inception", "The Godfather",
       "Gladiator", "Avatar", "The Dark Knight", "Pulp Fiction", "Casablanca",
@@ -96,6 +122,102 @@ class StirnratenData {
       "U2", "Bob Dylan", "Pink Floyd", "AC/DC", "The Rolling Stones",
       "Imagine Dragons", "Red Hot Chili Peppers", "The Weeknd", "Eminem", "Lady Gaga",
       "Daft Punk", "Green Day", "Metallica", "Rihanna", "Sia",
+    ],
+
+    StirnratenCategory.videogames: [
+      "Mario", "Minecraft", "Fortnite", "Zelda", "Among Us",
+      "Pikachu", "PlayStation", "Xbox", "Nintendo", "Tetris",
+      "Pac-Man", "Sonic", "Call of Duty", "GTA", "Sims",
+      "League of Legends", "World of Warcraft", "Roblox", "Animal Crossing", "FIFA",
+      "Clash Royale", "Brawl Stars", "Candy Crush", "Subway Surfers", "Temple Run",
+    ],
+
+    StirnratenCategory.superheroes: [
+      "Spider-Man", "Batman", "Iron Man", "Wonder Woman", "Thanos",
+      "Joker", "Superman", "Captain America", "Thor", "Hulk",
+      "Black Widow", "Black Panther", "Deadpool", "Wolverine", "Flash",
+      "Aquaman", "Green Lantern", "Doctor Strange", "Scarlet Witch", "Loki",
+      "Groot", "Rocket Raccoon", "Star-Lord", "Gamora", "Drax",
+    ],
+
+    StirnratenCategory.disney: [
+      "Micky Maus", "Elsa", "Simba", "Buzz Lightyear", "Arielle",
+      "Shrek", "Donald Duck", "Goofy", "Pluto", "Minnie Maus",
+      "Aladdin", "Dschinni", "Peter Pan", "Tinkerbell", "Cinderella",
+      "Schneewittchen", "Dornröschen", "Rapunzel", "Vaiana", "Maui",
+      "Woody", "Nemo", "Dorie", "Wall-E", "Ratatouille",
+    ],
+
+    StirnratenCategory.youtubers: [
+      "MontanaBlack", "MrBeast", "Rezo", "BibisBeautyPalace", "Knossi",
+      "Trymacs", "Unge", "Gronkh", "Julien Bam", "Dagi Bee",
+      "Laserluca", "Paluten", "GermanLetsPlay", "Rewinside", "Sturmwaffel",
+      "Kelly MissesVlog", "Freshtorge", "Die Lochis", "ApeCrime", "Space Frogs",
+      "LeFloid", "HandOfBlood", "Papaplatte", "EliasN97", "Sidemen",
+    ],
+
+    StirnratenCategory.brands: [
+      "Apple", "Nike", "McDonald's", "Tesla", "IKEA",
+      "Coca-Cola", "Amazon", "Adidas", "Samsung", "Google",
+      "Microsoft", "Netflix", "Spotify", "Instagram", "TikTok",
+      "Facebook", "Twitter", "YouTube", "Starbucks", "Burger King",
+      "Lego", "PlayStation", "Xbox", "Nintendo", "Disney",
+    ],
+
+    StirnratenCategory.nineties: [
+      "Gameboy", "Tamagotchi", "Backstreet Boys", "Titanic", "Diddl-Maus",
+      "VHS-Kassette", "Walkman", "Spice Girls", "Friends", "Der Prinz von Bel-Air",
+      "Michael Jackson", "Britney Spears", "Nokia", "Windows 95", "Furby",
+      "Macarena", "Bravo Hits", "Loveparade", "G-Shock", "Buffalo Schuhe",
+      "Arschgeweih", "D-Mark", "Wiedervereinigung", "Eurodance", "Boybands",
+    ],
+
+    StirnratenCategory.twoThousands: [
+      "Pokémon Karten", "Nokia 3310", "Britney Spears", "Harry Potter", "MP3-Player",
+      "Eminem", "50 Cent", "Beyoncé", "Rihanna", "Lady Gaga",
+      "Avatar", "Der Herr der Ringe", "Fluch der Karibik", "Shrek", "Findet Nemo",
+      "Facebook", "YouTube", "iPhone", "Wii", "PlayStation 2",
+      "Tokio Hotel", "Aggro Berlin", "Sido", "Bushido", "Jamba Sparabo",
+    ],
+
+    StirnratenCategory.history: [
+      "Albert Einstein", "Kleopatra", "Napoleon", "Mozart", "Leonardo da Vinci",
+      "Julius Cäsar", "Alexander der Große", "Kolumbus", "Martin Luther", "Goethe",
+      "Schiller", "Beethoven", "Bach", "Van Gogh", "Picasso",
+      "Shakespeare", "Darwin", "Newton", "Galileo", "Edison",
+      "Tesla", "Curie", "Gandhi", "Mandela", "Luther King",
+    ],
+
+    StirnratenCategory.pantomime: [
+      "Zähneputzen", "Autofahren", "Schwimmen", "Kochen", "Angeln",
+      "Bügeln", "Staubsaugen", "Haare waschen", "Schlafen", "Essen",
+      "Trinken", "Telefonieren", "Schreiben", "Lesen", "Malen",
+      "Tanzen", "Singen", "Lachen", "Weinen", "Niesen",
+      "Husten", "Klatschen", "Winken", "Zeigen", "Springen",
+    ],
+
+    StirnratenCategory.noises: [
+      "Hubschrauber", "Kuh", "Wecker", "Kettensäge", "Baby",
+      "Hund", "Katze", "Schwein", "Pferd", "Schaf",
+      "Huhn", "Ente", "Frosch", "Löwe", "Elefant",
+      "Auto", "Motorrad", "Zug", "Flugzeug", "Sirene",
+      "Klingel", "Telefon", "Tastatur", "Wasserhahn", "Föhn",
+    ],
+
+    StirnratenCategory.household: [
+      "Toaster", "Staubsauger", "Gabel", "Fernbedienung", "Klobürste",
+      "Löffel", "Messer", "Teller", "Tasse", "Glas",
+      "Pfanne", "Topf", "Herd", "Backofen", "Kühlschrank",
+      "Waschmaschine", "Trockner", "Bügeleisen", "Föhn", "Zahnbürste",
+      "Seife", "Handtuch", "Bett", "Kissen", "Decke",
+    ],
+
+    StirnratenCategory.bodyParts: [
+      "Herz", "Ellenbogen", "Gehirn", "Blinddarm", "Zunge",
+      "Auge", "Ohr", "Nase", "Mund", "Zahn",
+      "Hals", "Schulter", "Arm", "Hand", "Finger",
+      "Bauch", "Rücken", "Bein", "Knie", "Fuß",
+      "Zeh", "Haare", "Haut", "Knochen", "Muskel",
     ],
 
     StirnratenCategory.celebrities: [
@@ -186,6 +308,38 @@ class StirnratenData {
       "Efeu", "Magnolie", "Oleander", "Hibiskus", "Basilikum",
       "Rosmarin", "Thymian", "Salbei", "Petersilie", "Koriander",
       "Zitrone", "Apfelbaum", "Olive", "Kiefer", "Zeder",
+    ],
+
+    StirnratenCategory.books: [
+      "Harry Potter", "Der Herr der Ringe", "Die Tribute von Panem", "Twilight", "Der kleine Prinz",
+      "Pippi Langstrumpf", "Die unendliche Geschichte", "Momo", "Tintenherz", "Eragon",
+      "Gregs Tagebuch", "Die drei ???", "TKKG", "Fünf Freunde", "Hanni und Nanni",
+      "Das Parfum", "Der Vorleser", "Faust", "Die Verwandlung", "Im Westen nichts Neues",
+      "1984", "Schöne neue Welt", "Der Alchimist", "Der Da Vinci Code", "Illuminati",
+    ],
+
+    StirnratenCategory.cities: [
+      "Berlin", "München", "Hamburg", "Köln", "Frankfurt",
+      "Paris", "London", "New York", "Tokio", "Rom",
+      "Barcelona", "Madrid", "Wien", "Zürich", "Amsterdam",
+      "Dubai", "Sydney", "Los Angeles", "San Francisco", "Las Vegas",
+      "Rio de Janeiro", "Moskau", "Peking", "Istanbul", "Kairo",
+    ],
+
+    StirnratenCategory.festivals: [
+      "Weihnachten", "Ostern", "Silvester", "Halloween", "Karneval",
+      "Oktoberfest", "Valentinstag", "Muttertag", "Vatertag", "Geburtstag",
+      "Hochzeit", "Taufe", "Einschulung", "Abschlussball", "Junggesellenabschied",
+      "St. Martin", "Nikolaus", "Erntedankfest", "Pfingsten", "Himmelfahrt",
+      "Ramadan", "Zuckerfest", "Chanukka", "Diwali", "Thanksgiving",
+    ],
+
+    StirnratenCategory.feelings: [
+      "Liebe", "Hass", "Wut", "Trauer", "Freude",
+      "Angst", "Eifersucht", "Neid", "Stolz", "Scham",
+      "Schuld", "Hoffnung", "Verzweiflung", "Einsamkeit", "Langeweile",
+      "Aufregung", "Nervosität", "Enttäuschung", "Dankbarkeit", "Mitleid",
+      "Sympathie", "Antipathie", "Vertrauen", "Misstrauen", "Gier",
     ],
   };
 

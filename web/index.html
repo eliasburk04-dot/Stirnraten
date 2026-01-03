@@ -31,48 +31,9 @@
 
   <title>luegner_spiel</title>
   <link rel="manifest" href="manifest.json">
-  <script>
-    // Global variable to store latest acceleration including gravity
-    window.latestAccelerometerData = { x: 0, y: 0, z: 0 };
-
-    // Helper to request DeviceMotion permission on iOS 13+
-    window.requestDeviceMotionPermission = function() {
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        return DeviceMotionEvent.requestPermission()
-          .then(permissionState => {
-            if (permissionState === 'granted') {
-              window.addEventListener('devicemotion', (event) => {
-                if (event.accelerationIncludingGravity) {
-                  window.latestAccelerometerData = {
-                    x: event.accelerationIncludingGravity.x || 0,
-                    y: event.accelerationIncludingGravity.y || 0,
-                    z: event.accelerationIncludingGravity.z || 0
-                  };
-                }
-              });
-              return true;
-            }
-            return false;
-          })
-          .catch(error => {
-            console.error(error);
-            return false;
-          });
-      } else {
-        // Non-iOS 13+ devices (Android, older iOS)
-        window.addEventListener('devicemotion', (event) => {
-          if (event.accelerationIncludingGravity) {
-            window.latestAccelerometerData = {
-              x: event.accelerationIncludingGravity.x || 0,
-              y: event.accelerationIncludingGravity.y || 0,
-              z: event.accelerationIncludingGravity.z || 0
-            };
-          }
-        });
-        return Promise.resolve(true);
-      }
-    };
-  </script>
+  
+  <!-- Tilt Detection System -->
+  <script src="sensor_tilt.js"></script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

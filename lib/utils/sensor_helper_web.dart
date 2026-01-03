@@ -1,10 +1,20 @@
 import 'package:js/js.dart';
+import 'dart:js_util';
 
 @JS('requestDeviceMotionPermission')
 external dynamic _requestDeviceMotionPermission();
 
 @JS('latestAccelerometerData')
 external dynamic get _latestAccelerometerData;
+
+@JS('tiltDetection.start')
+external void _startTiltDetection(Function correctCallback, Function passCallback);
+
+@JS('tiltDetection.stop')
+external void _stopTiltDetection();
+
+@JS('tiltDetection.isActive')
+external bool get _isTiltDetectionActive;
 
 Future<bool> requestSensorPermission() async {
   try {
@@ -13,8 +23,18 @@ Future<bool> requestSensorPermission() async {
       final v = await result;
       return v == true;
     }
+    // Handle Promise from JS
+    if (result != null) {
+      try {
+        final promiseResult = await promiseToFuture(result);
+        return promiseResult == true;
+      } catch (_) {
+        return result == true;
+      }
+    }
     return result == true;
-  } catch (_) {
+  } catch (e) {
+    print('⚠️ requestSensorPermission error: $e');
     return false;
   }
 }
@@ -34,4 +54,26 @@ List<double> getWebAccelerometerData() {
     }
   } catch (_) {}
   return [0.0, 0.0, 0.0];
+}
+
+void startWebTiltDetection(Function correctCallback, Function passCallback) {
+  try {
+    // IMPORTANT: Use allowInterop to make Dart functions callable from JavaScript
+    _startTiltDetection(
+      allowInterop(correctCallback),
+      allowInterop(passCallback),
+    );
+    print('✅ Web tilt detection started with allowInterop');
+  } catch (e) {
+    print('⚠️ Failed to start web tilt detection: $e');
+  }
+}
+
+void stopWebTiltDetection() {
+  try {
+    _stopTiltDetection();
+    print('✅ Web tilt detection stopped');
+  } catch (e) {
+    print('⚠️ Failed to stop web tilt detection: $e');
+  }
 }

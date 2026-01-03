@@ -25,7 +25,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   List<String> _currentWords = [];
   List<Map<String, dynamic>> _results = []; // {word: String, correct: bool}
   int _score = 0;
-  int _timeLeft = 60;
+  int _timeLeft = 150;
   int _countdown = 3;
   Timer? _gameTimer;
   Timer? _countdownTimer;
@@ -50,6 +50,10 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _accelerometerSubscription?.cancel();
     _accelerometerSubscription = null;
     
+    if (kIsWeb) {
+      stopWebTiltDetection();
+    }
+    
     if (kDebugMode) {
       debugPrint('🎮 Stirnraten: Sensors cleaned up');
     }
@@ -61,7 +65,67 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     super.dispose();
   }
 
-  void _startCountdown(StirnratenCategory category) async {
+  void _showOwnWordsDialog() {
+    final TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Eigene Wörter', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Gib deine Wörter ein (getrennt durch Komma):',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: 'Apfel, Birne, Banane...',
+                hintStyle: TextStyle(color: Colors.white30),
+                border: OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white30),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.blue),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () {
+              final text = controller.text;
+              if (text.isNotEmpty) {
+                final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                if (words.isNotEmpty) {
+                  Navigator.pop(context);
+                  _startCountdownWithWords(words);
+                }
+              }
+            },
+            child: const Text('Starten'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _startCountdown(StirnratenCategory category) {
+    _startCountdownWithWords(StirnratenData.getWords(category));
+  }
+
+  void _startCountdownWithWords(List<String> words) async {
     // Unlock audio context on user interaction
     context.read<SoundService>().unlock();
 
@@ -75,9 +139,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     ]);
 
     setState(() {
-      _currentWords = List.from(StirnratenData.getWords(category))..shuffle();
+      _currentWords = List.from(words)..shuffle();
       _score = 0;
-      _timeLeft = 60;
+      _timeLeft = 150;
       _results = [];
       _countdown = 3;
       _gameState = StirnratenGameState.countdown;
@@ -141,32 +205,36 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       }
     }
     
-    // Mobile-optimized sensor stream configuration
-    _accelerometerSubscription = accelerometerEventStream().listen(
-      (AccelerometerEvent event) {
-        _processSensorData(event.x, event.y, event.z);
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          print('⚠️ Sensor error: $error');
-        }
-      },
-      cancelOnError: false,
-    );
-
-    // Web fallback (sekundär)
     if (kIsWeb) {
-      Timer.periodic(const Duration(milliseconds: 100), (timer) {
-        if (_gameState != StirnratenGameState.playing) {
-          timer.cancel();
-          return;
+      // Web: Use JavaScript-based tilt detection
+      if (kDebugMode) {
+        debugPrint('🌐 Using JavaScript tilt detection for Web');
+      }
+      startWebTiltDetection(() {
+        if (_gameState == StirnratenGameState.playing && _canSkip) {
+          _handleCorrect();
         }
-        
-        final webData = getWebAccelerometerData();
-        if (webData[0] != 0 || webData[1] != 0 || webData[2] != 0) {
-           _processSensorData(webData[0], webData[1], webData[2]);
+      }, () {
+        if (_gameState == StirnratenGameState.playing && _canSkip) {
+          _handlePass();
         }
       });
+    } else {
+      // Mobile: Use Dart sensor stream
+      if (kDebugMode) {
+        debugPrint('📱 Using Dart sensor stream for Mobile');
+      }
+      _accelerometerSubscription = accelerometerEventStream().listen(
+        (AccelerometerEvent event) {
+          _processSensorData(event.x, event.y, event.z);
+        },
+        onError: (error) {
+          if (kDebugMode) {
+            print('⚠️ Sensor error: $error');
+          }
+        },
+        cancelOnError: false,
+      );
     }
     
     if (kDebugMode) {
@@ -183,22 +251,25 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _lastSensorProcessing = now;
 
     // Adaptive Thresholds: Mobile-Geräte haben oft andere Sensitivität
-    // Y-Achse für Landscape-Modus: Kippen nach vorne (positiv) oder hinten (negativ)
     const bool isMobile = !kIsWeb;
     
     // Mobile: Etwas höhere Thresholds für stabilere Erkennung
     // Web: Niedrigere Thresholds (wie vorher)
-    const double tiltThreshold = isMobile ? 7.0 : 6.0;
-    const double neutralThreshold = isMobile ? 5.0 : 4.0;
+    const double tiltThreshold = isMobile ? 7.0 : 5.0;
+    const double neutralThreshold = isMobile ? 5.0 : 3.0;
+
+    // Web verwendet X-Achse im Landscape, Mobile verwendet Y-Achse
+    // Web: accelerationIncludingGravity hat andere Vorzeichen
+    final double tiltValue = kIsWeb ? -x : y;
 
     // Debug-Logging (nur alle 500ms um nicht zu spammen)
     if (kDebugMode && now.millisecondsSinceEpoch % 500 < 50) {
       const platform = isMobile ? '📱' : '🌐';
-      debugPrint('$platform Sensor: x=${x.toStringAsFixed(1)}, y=${y.toStringAsFixed(1)}, z=${z.toStringAsFixed(1)} | Neutral: $_neutralPosition | Thresholds: tilt=$tiltThreshold, neutral=$neutralThreshold');
+      debugPrint('$platform Sensor: x=${x.toStringAsFixed(1)}, y=${y.toStringAsFixed(1)}, z=${z.toStringAsFixed(1)} | tiltValue=${tiltValue.toStringAsFixed(1)} | Neutral: $_neutralPosition');
     }
 
     // Neutral Position erkennen
-    if (y.abs() < neutralThreshold) {
+    if (tiltValue.abs() < neutralThreshold) {
       if (!_neutralPosition && kDebugMode) {
         debugPrint('✅ Neutral position restored');
       }
@@ -208,18 +279,18 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
     if (!_neutralPosition) return;
 
-    // Kippen nach vorne (y > threshold) = Richtig
-    if (y > tiltThreshold) {
+    // Kippen nach vorne (tiltValue > threshold) = Richtig
+    if (tiltValue > tiltThreshold) {
       if (kDebugMode) {
-        debugPrint('🟢 CORRECT detected! y=${y.toStringAsFixed(1)}');
+        debugPrint('🟢 CORRECT detected! tiltValue=${tiltValue.toStringAsFixed(1)}');
       }
       _neutralPosition = false;
       _handleCorrect();
     }
-    // Kippen nach hinten (y < -threshold) = Überspringen
-    else if (y < -tiltThreshold) {
+    // Kippen nach hinten (tiltValue < -threshold) = Überspringen
+    else if (tiltValue < -tiltThreshold) {
       if (kDebugMode) {
-        debugPrint('🔴 PASS detected! y=${y.toStringAsFixed(1)}');
+        debugPrint('🔴 PASS detected! tiltValue=${tiltValue.toStringAsFixed(1)}');
       }
       _neutralPosition = false;
       _handlePass();
@@ -324,6 +395,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   void _endGame() {
     _gameTimer?.cancel();
     _accelerometerSubscription?.cancel();
+    
+    if (kIsWeb) {
+      stopWebTiltDetection();
+    }
+    
     context.read<SoundService>().playEnd();
     
     SystemChrome.setPreferredOrientations([
@@ -438,7 +514,13 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   return _CategoryCard(
                     title: StirnratenData.categoryNames[category]!,
                     gradientColors: colors,
-                    onTap: () => _startCountdown(category),
+                    onTap: () {
+                      if (category == StirnratenCategory.ownWords) {
+                        _showOwnWordsDialog();
+                      } else {
+                        _startCountdown(category);
+                      }
+                    },
                   );
                 },
                 childCount: StirnratenCategory.values.length,
@@ -533,6 +615,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         return [const Color(0xFFF59E0B), const Color(0xFFFCD34D)];
       case StirnratenCategory.feelings:
         return [const Color(0xFFEF4444), const Color(0xFFF87171)];
+      case StirnratenCategory.ownWords:
+        return [const Color(0xFF8B5CF6), const Color(0xFFEC4899)];
       default:
         return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
     }

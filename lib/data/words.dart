@@ -32,6 +32,7 @@ enum StirnratenCategory {
   cities,
   festivals,
   feelings,
+  ownWords,
 }
 
 /// Data class for Stirnraten words
@@ -68,9 +69,13 @@ class StirnratenData {
     StirnratenCategory.cities: 'Städte',
     StirnratenCategory.festivals: 'Feste',
     StirnratenCategory.feelings: 'Gefühle',
+    StirnratenCategory.ownWords: 'Eigene Wörter',
   };
 
   static const Map<StirnratenCategory, List<String>> words = {
+    StirnratenCategory.ownWords: [
+      "Dein Vater", 
+    ],
     StirnratenCategory.anime: [
       "Naruto", "One Piece", "Dragon Ball Z", "Attack on Titan", "Death Note",
       "Demon Slayer", "Jujutsu Kaisen", "My Hero Academia", "Fullmetal Alchemist", "Pokemon",

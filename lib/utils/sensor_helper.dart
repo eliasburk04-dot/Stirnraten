@@ -5,3 +5,7 @@ Future<bool> requestSensorPermission() => impl.requestSensorPermission();
 
 List<double> getWebAccelerometerData() => impl.getWebAccelerometerData();
 
+void startWebTiltDetection(Function correctCallback, Function passCallback) => 
+    impl.startWebTiltDetection(correctCallback, passCallback);
+
+void stopWebTiltDetection() => impl.stopWebTiltDetection();

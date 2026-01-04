@@ -43,27 +43,29 @@ class GlassCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white.withAlpha(15),
-                  Colors.white.withAlpha(8),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+        child: RepaintBoundary(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white.withAlpha(15),
+                    Colors.white.withAlpha(8),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withAlpha(25),
+                  width: 1.5,
+                ),
               ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withAlpha(25),
-                width: 1.5,
+              child: Padding(
+                padding: padding ?? const EdgeInsets.all(24),
+                child: child,
               ),
-            ),
-            child: Padding(
-              padding: padding ?? const EdgeInsets.all(24),
-              child: child,
             ),
           ),
         ),
@@ -387,6 +389,8 @@ class ModernBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
+      height: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [

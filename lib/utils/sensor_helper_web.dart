@@ -1,5 +1,7 @@
 import 'package:js/js.dart';
 import 'dart:js_util';
+import 'dart:js' show allowInterop;
+import 'package:flutter/foundation.dart';
 
 @JS('requestDeviceMotionPermission')
 external dynamic _requestDeviceMotionPermission();
@@ -34,7 +36,7 @@ Future<bool> requestSensorPermission() async {
     }
     return result == true;
   } catch (e) {
-    print('⚠️ requestSensorPermission error: $e');
+    debugPrint('⚠️ requestSensorPermission error: $e');
     return false;
   }
 }
@@ -63,17 +65,17 @@ void startWebTiltDetection(Function correctCallback, Function passCallback) {
       allowInterop(correctCallback),
       allowInterop(passCallback),
     );
-    print('✅ Web tilt detection started with allowInterop');
+    debugPrint('✅ Web tilt detection started with allowInterop');
   } catch (e) {
-    print('⚠️ Failed to start web tilt detection: $e');
+    debugPrint('⚠️ Failed to start web tilt detection: $e');
   }
 }
 
 void stopWebTiltDetection() {
   try {
     _stopTiltDetection();
-    print('✅ Web tilt detection stopped');
+    debugPrint('✅ Web tilt detection stopped');
   } catch (e) {
-    print('⚠️ Failed to stop web tilt detection: $e');
+    debugPrint('⚠️ Failed to stop web tilt detection: $e');
   }
 }

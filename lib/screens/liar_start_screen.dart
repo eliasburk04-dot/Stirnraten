@@ -18,27 +18,18 @@ class LiarStartScreen extends StatefulWidget {
 class _LiarStartScreenState extends State<LiarStartScreen> with TickerProviderStateMixin {
   final _nameController = TextEditingController();
   bool _isCreatingRoom = false;
-  late AnimationController _floatController;
-  late AnimationController _rotateController;
+  bool _isHowToPlayExpanded = false;
+  bool _specialRolesEnabled = false;
+  int _selectedLiarCount = 1;
 
   @override
   void initState() {
     super.initState();
-    _floatController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    )..repeat(reverse: true);
-    _rotateController = AnimationController(
-      duration: const Duration(seconds: 20),
-      vsync: this,
-    )..repeat();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _floatController.dispose();
-    _rotateController.dispose();
     super.dispose();
   }
 
@@ -57,7 +48,11 @@ class _LiarStartScreenState extends State<LiarStartScreen> with TickerProviderSt
     setState(() => _isCreatingRoom = true);
 
     final gameService = context.read<GameService>();
-    final success = await gameService.createRoom(name);
+    final success = await gameService.createRoom(
+      name, 
+      liarCount: _selectedLiarCount,
+      specialRolesEnabled: _specialRolesEnabled,
+    );
 
     setState(() => _isCreatingRoom = false);
 
@@ -174,18 +169,26 @@ class _LiarStartScreenState extends State<LiarStartScreen> with TickerProviderSt
     return Column(
       children: [
         Container(
-          width: 100,
-          height: 100,
+          width: 120,
+          height: 120,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
             ),
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFEC4899).withAlpha(60),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
           ),
-          child: const Center(
-            child: Text(
-              '🎭',
-              style: TextStyle(fontSize: 48),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: Image.asset(
+              'assets/images/Lügner_image.png',
+              fit: BoxFit.cover,
             ),
           ),
         ),
@@ -253,6 +256,139 @@ class _LiarStartScreenState extends State<LiarStartScreen> with TickerProviderSt
             textCapitalization: TextCapitalization.words,
             hintText: 'Wie heißt du?',
             onSubmitted: (_) => _createRoom(),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Anzahl Lügner:',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: DropdownButton<int>(
+                  value: _selectedLiarCount,
+                  dropdownColor: const Color(0xFF1E293B),
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  items: [1, 2, 3].map((int value) {
+                    return DropdownMenuItem<int>(
+                      value: value,
+                      child: Text('$value'),
+                    );
+                  }).toList(),
+                  onChanged: (int? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _selectedLiarCount = newValue;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSpecialRolesToggle(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpecialRolesToggle() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Spezialrollen:',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  'Detektiv & Komplize',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            Switch.adaptive(
+              value: _specialRolesEnabled,
+              activeColor: AppTheme.primaryPurple,
+              onChanged: (value) {
+                setState(() {
+                  _specialRolesEnabled = value;
+                });
+              },
+            ),
+          ],
+        ),
+        if (_specialRolesEnabled) ...[
+          const SizedBox(height: 12),
+          _buildRoleDescription(
+            '🕵️', 
+            'Detektiv', 
+            'Erhält einen Hinweis, dass die Fragen unterschiedlich sind (aber nicht die Lügner-Frage).',
+            const Color(0xFF3B82F6),
+          ),
+          const SizedBox(height: 8),
+          _buildRoleDescription(
+            '🤝', 
+            'Komplize', 
+            'Lügner wissen bei mehreren Lügnern voneinander.',
+            const Color(0xFFEF4444),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRoleDescription(String emoji, String title, String desc, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                Text(
+                  desc,
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -325,94 +461,136 @@ class _LiarStartScreenState extends State<LiarStartScreen> with TickerProviderSt
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
+          GestureDetector(
+            onTap: () => setState(() => _isHowToPlayExpanded = !_isHowToPlayExpanded),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  borderRadius: BorderRadius.circular(10),
+                  child: const Icon(
+                    Icons.menu_book_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.lightbulb_outline,
-                  color: Colors.white,
-                  size: 20,
+                const SizedBox(width: 12),
+                const Text(
+                  'Spielanleitung',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'So funktioniert\'s',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.2,
+                const Spacer(),
+                AnimatedRotation(
+                  duration: const Duration(milliseconds: 300),
+                  turns: _isHowToPlayExpanded ? 0.5 : 0,
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          _buildStep(1, 'Alle bekommen dieselbe Frage...', 'nur einer nicht!',
-              const Color(0xFFA855F7),),
-          _buildStep(2, 'Der Lügner muss sich', 'unauffällig verhalten',
-              const Color(0xFFEC4899),),
-          _buildStep(3, 'Alle antworten, dann', 'wird abgestimmt',
-              const Color(0xFF06B6D4),),
-          _buildStep(4, 'Finde den Lügner oder', 'überlebe als Lügner!',
-              const Color(0xFF10B981), isLast: true,),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: _isHowToPlayExpanded
+                ? Column(
+                    children: [
+                      const SizedBox(height: 24),
+                      _buildStep(
+                        1,
+                        'Geheimnis erhalten',
+                        'Fast alle Spieler erhalten die gleiche Frage mit einer Zahl als Antwort. Nur die Lügner erhalten eine leicht andere Frage!',
+                        const Color(0xFFA855F7),
+                      ),
+                      _buildStep(
+                        2,
+                        'Antworten geben',
+                        'Jeder gibt seine Antwort ein. Als Lügner musst du schätzen, was die anderen gefragt wurden, um nicht aufzufallen.',
+                        const Color(0xFFEC4899),
+                      ),
+                      _buildStep(
+                        3,
+                        'Diskussion & Voting',
+                        'Vergleicht eure Antworten! Wer weicht extrem ab? Diskutiert und stimmt dann ab, wer der Lügner ist.',
+                        const Color(0xFF06B6D4),
+                      ),
+                      _buildStep(
+                        4,
+                        'Sieg oder Niederlage',
+                        'Wird der Lügner entlarvt, gewinnen die ehrlichen Spieler. Bleibt er unentdeckt, gewinnt der Lügner!',
+                        const Color(0xFF10B981),
+                        isLast: true,
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStep(int number, String line1, String line2, Color color,
-      {bool isLast = false,}) {
+  Widget _buildStep(int number, String title, String description, Color color,
+      {bool isLast = false}) {
     return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(10),
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.5), width: 2),
             ),
             child: Center(
               child: Text(
                 '$number',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line1,
+                  title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.2,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  line2,
+                  description,
                   style: TextStyle(
-                    color: Colors.white.withAlpha(140),
+                    color: Colors.white.withOpacity(0.7),
                     fontSize: 13,
+                    height: 1.4,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: 0.2,
                   ),
                 ),
               ],

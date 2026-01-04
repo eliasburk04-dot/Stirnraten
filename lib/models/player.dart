@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+enum PlayerRole { normal, detective, accomplice }
+
 /// Represents a player in the game
 class Player {
   final String id;
   final String name;
   final bool isHost;
   final bool isLiar;
+  final PlayerRole role;
   final String? answer;
   final String? votedFor; // Player ID they voted for
   final bool isConnected;
@@ -16,6 +19,7 @@ class Player {
     required this.name,
     this.isHost = false,
     this.isLiar = false,
+    this.role = PlayerRole.normal,
     this.answer,
     this.votedFor,
     this.isConnected = true,
@@ -28,6 +32,7 @@ class Player {
     String? name,
     bool? isHost,
     bool? isLiar,
+    PlayerRole? role,
     String? answer,
     String? votedFor,
     bool? isConnected,
@@ -38,6 +43,7 @@ class Player {
       name: name ?? this.name,
       isHost: isHost ?? this.isHost,
       isLiar: isLiar ?? this.isLiar,
+      role: role ?? this.role,
       answer: answer ?? this.answer,
       votedFor: votedFor ?? this.votedFor,
       isConnected: isConnected ?? this.isConnected,
@@ -52,6 +58,7 @@ class Player {
       'name': name,
       'isHost': isHost,
       'isLiar': isLiar,
+      'role': role.name,
       'answer': answer,
       'votedFor': votedFor,
       'isConnected': isConnected,
@@ -66,6 +73,7 @@ class Player {
       name: map['name'] as String,
       isHost: map['isHost'] as bool? ?? false,
       isLiar: map['isLiar'] as bool? ?? false,
+      role: PlayerRole.values.firstWhere((e) => e.name == (map['role'] as String? ?? 'normal'), orElse: () => PlayerRole.normal),
       answer: map['answer'] as String?,
       votedFor: map['votedFor'] as String?,
       isConnected: map['isConnected'] as bool? ?? true,

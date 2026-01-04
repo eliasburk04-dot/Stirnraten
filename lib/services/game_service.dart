@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
 import '../data/questions.dart';
+import '../data/bomb_party_data.dart';
 
 /// Service class for managing game state and Firebase synchronization
 class GameService extends ChangeNotifier {
@@ -24,7 +25,7 @@ class GameService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isHost => _currentPlayer?.id == _currentRoom?.hostId;
-  bool get isLiar => _currentPlayer?.id == _currentRoom?.liarId;
+  bool get isLiar => _currentRoom?.liarIds.contains(_currentPlayer?.id) ?? false;
   
   /// Get the question for the current player (different for liar)
   Question? get myQuestion {
@@ -47,7 +48,7 @@ class GameService extends ChangeNotifier {
   }
 
   /// Create a new room and become the host
-  Future<bool> createRoom(String playerName) async {
+  Future<bool> createRoom(String playerName, {int liarCount = 1, bool specialRolesEnabled = false, GameType gameType = GameType.liar}) async {
     _setLoading(true);
     _clearError();
 
@@ -71,6 +72,10 @@ class GameService extends ChangeNotifier {
         hostId: playerId,
         players: [host],
         state: GameState.lobby,
+        gameType: gameType,
+        liarCount: liarCount,
+        specialRolesEnabled: specialRolesEnabled,
+        minPlayers: gameType == GameType.bombParty ? 2 : 3,
         createdAt: DateTime.now(),
       );
 
@@ -220,7 +225,11 @@ class GameService extends ChangeNotifier {
 
   /// Start the game (host only)
   Future<void> startGame() async {
-    if (!isHost || _currentRoom == null) return;
+    if (!isHost || _currentRoom == null) return;    
+    if (_currentRoom!.gameType == GameType.bombParty) {
+      await startBombParty();
+      return;
+    }
     if (!_currentRoom!.canStart) {
       _setError('Need at least ${_currentRoom!.minPlayers} players to start.');
       return;
@@ -230,25 +239,56 @@ class GameService extends ChangeNotifier {
       // Get question pair
       final questionPair = getQuestionPair();
       
-      // Select random liar
+      // Select random liars based on liarCount
       final players = _currentRoom!.players;
-      final liarIndex = Random().nextInt(players.length);
-      final liarId = players[liarIndex].id;
+      final liarCount = _currentRoom!.liarCount;
+      final specialRoles = _currentRoom!.specialRolesEnabled;
+      
+      // Shuffle players to pick random liars and roles
+      final shuffledPlayers = List<Player>.from(players)..shuffle();
+      
+      final liarIds = shuffledPlayers.take(liarCount).map((p) => p.id).toList();
+      final remainingPlayers = shuffledPlayers.skip(liarCount).toList();
+      
+      String? detectiveId;
+      List<String> accompliceIds = [];
+
+      if (specialRoles) {
+        // Assign Detective (from non-liars)
+        if (remainingPlayers.isNotEmpty) {
+          detectiveId = remainingPlayers.first.id;
+        }
+        
+        // Assign Accomplices (if more than 1 liar)
+        if (liarCount > 1) {
+          accompliceIds = liarIds; // All liars are accomplices to each other
+        }
+      }
 
       // Update room state
       final updates = <String, dynamic>{
         'state': GameState.questioning.name,
         'currentQuestion': questionPair['normal']!.toMap(),
         'liarQuestion': questionPair['liar']!.toMap(),
-        'liarId': liarId,
+        'liarIds': liarIds,
         'roundNumber': _currentRoom!.roundNumber + 1,
       };
 
       // Reset player answers and votes
       for (final player in players) {
+        final isLiar = liarIds.contains(player.id);
+        PlayerRole role = PlayerRole.normal;
+        
+        if (player.id == detectiveId) {
+          role = PlayerRole.detective;
+        } else if (accompliceIds.contains(player.id)) {
+          role = PlayerRole.accomplice;
+        }
+
         updates['players/${player.id}/answer'] = null;
         updates['players/${player.id}/votedFor'] = null;
-        updates['players/${player.id}/isLiar'] = player.id == liarId;
+        updates['players/${player.id}/isLiar'] = isLiar;
+        updates['players/${player.id}/role'] = role.name;
       }
 
       await _database.ref('rooms/${_currentRoom!.id}').update(updates);
@@ -333,15 +373,15 @@ class GameService extends ChangeNotifier {
       final room = _currentRoom!;
       final scores = Map<String, int>.from(room.scores);
       
-      // If liar was caught, voters who guessed correctly get points
+      // If a liar was caught, voters who guessed correctly get points
       if (room.liarWasCaught) {
         for (final player in room.playersWhoGuessedCorrectly) {
           scores[player.id] = (scores[player.id] ?? 0) + 1;
         }
       } else {
-        // Liar gets points if not caught
-        if (room.liarId != null) {
-          scores[room.liarId!] = (scores[room.liarId!] ?? 0) + 2;
+        // Liars get points if none of them were caught
+        for (final liarId in room.liarIds) {
+          scores[liarId] = (scores[liarId] ?? 0) + 2;
         }
       }
 
@@ -362,7 +402,11 @@ class GameService extends ChangeNotifier {
         'state': GameState.lobby.name,
         'currentQuestion': null,
         'liarQuestion': null,
-        'liarId': null,
+        'liarIds': [],
+        'currentSyllable': null,
+        'activePlayerId': null,
+        'usedWords': [],
+        'lives': {},
       };
 
       // Reset player answers and votes
@@ -381,6 +425,135 @@ class GameService extends ChangeNotifier {
   /// End the game and return to home
   Future<void> endGame() async {
     await leaveRoom();
+  }
+
+  // ============================================================================
+  // BOMB PARTY LOGIC
+  // ============================================================================
+
+  /// Start Bomb Party game
+  Future<void> startBombParty() async {
+    if (!isHost || _currentRoom == null) return;
+
+    try {
+      final random = Random();
+      final firstSyllable = bombPartySyllables[random.nextInt(bombPartySyllables.length)];
+      final firstPlayerId = _currentRoom!.players[random.nextInt(_currentRoom!.players.length)].id;
+      
+      final lives = <String, int>{};
+      for (final player in _currentRoom!.players) {
+        lives[player.id] = 3;
+      }
+
+      final updates = <String, dynamic>{
+        'state': GameState.playing.name,
+        'currentSyllable': firstSyllable,
+        'activePlayerId': firstPlayerId,
+        'lives': lives,
+        'usedWords': [],
+        'turnEndsAt': DateTime.now().millisecondsSinceEpoch + 15000,
+      };
+
+      await _database.ref('rooms/${_currentRoom!.id}').update(updates);
+    } catch (e) {
+      _setError('Failed to start Bomb Party: $e');
+    }
+  }
+
+  /// Submit a word in Bomb Party
+  Future<bool> submitBombWord(String word) async {
+    if (_currentRoom == null || _currentPlayer == null) return false;
+    if (_currentRoom!.activePlayerId != _currentPlayer!.id) return false;
+
+    final normalizedWord = word.trim().toUpperCase();
+    final syllable = _currentRoom!.currentSyllable?.toUpperCase() ?? '';
+
+    // Validation
+    if (!normalizedWord.contains(syllable)) return false;
+    if (_currentRoom!.usedWords.contains(normalizedWord)) return false;
+    if (normalizedWord.length < 3) return false;
+
+    try {
+      final random = Random();
+      final nextSyllable = bombPartySyllables[random.nextInt(bombPartySyllables.length)];
+      
+      // Find next player with lives
+      final playersWithLives = _currentRoom!.players.where((p) => (_currentRoom!.lives[p.id] ?? 0) > 0).toList();
+      final currentIndex = playersWithLives.indexWhere((p) => p.id == _currentPlayer!.id);
+      final nextPlayer = playersWithLives[(currentIndex + 1) % playersWithLives.length];
+
+      final usedWords = List<String>.from(_currentRoom!.usedWords);
+      usedWords.add(normalizedWord);
+
+      final updates = <String, dynamic>{
+        'currentSyllable': nextSyllable,
+        'activePlayerId': nextPlayer.id,
+        'usedWords': usedWords,
+        'turnEndsAt': DateTime.now().millisecondsSinceEpoch + 15000,
+        'currentInput': '', // Clear input for next player
+      };
+
+      await _database.ref('rooms/${_currentRoom!.id}').update(updates);
+      return true;
+    } catch (e) {
+      _setError('Failed to submit word: $e');
+      return false;
+    }
+  }
+
+  /// Update current typing input for Bomb Party
+  Future<void> updateBombInput(String input) async {
+    if (_currentRoom == null || _currentPlayer == null) return;
+    if (_currentRoom!.activePlayerId != _currentPlayer!.id) return;
+
+    try {
+      await _database.ref('rooms/${_currentRoom!.id}/currentInput').set(input);
+    } catch (e) {
+      // Silent error for typing sync
+    }
+  }
+
+  /// Handle bomb explosion (timer reached 0)
+  Future<void> handleExplosion() async {
+    if (!isHost || _currentRoom == null) return;
+
+    try {
+      final activeId = _currentRoom!.activePlayerId;
+      if (activeId == null) return;
+
+      final lives = Map<String, int>.from(_currentRoom!.lives);
+      lives[activeId] = (lives[activeId] ?? 1) - 1;
+
+      // Check if game over (only one player left with lives)
+      final playersWithLives = _currentRoom!.players.where((p) => (lives[p.id] ?? 0) > 0).toList();
+      
+      final updates = <String, dynamic>{
+        'lives': lives,
+        'turnEndsAt': DateTime.now().millisecondsSinceEpoch + 15000,
+        'currentInput': '', // Clear input
+      };
+
+      if (playersWithLives.length <= 1) {
+        updates['state'] = GameState.gameOver.name;
+      } else {
+        // Move to next player
+        final currentIndex = _currentRoom!.players.indexWhere((p) => p.id == activeId);
+        // Find next player with lives
+        int nextIndex = (currentIndex + 1) % _currentRoom!.players.length;
+        while ((lives[_currentRoom!.players[nextIndex].id] ?? 0) <= 0) {
+          nextIndex = (nextIndex + 1) % _currentRoom!.players.length;
+        }
+        updates['activePlayerId'] = _currentRoom!.players[nextIndex].id;
+        
+        // New syllable
+        final random = Random();
+        updates['currentSyllable'] = bombPartySyllables[random.nextInt(bombPartySyllables.length)];
+      }
+
+      await _database.ref('rooms/${_currentRoom!.id}').update(updates);
+    } catch (e) {
+      _setError('Failed to handle explosion: $e');
+    }
   }
 
   // ============================================================================

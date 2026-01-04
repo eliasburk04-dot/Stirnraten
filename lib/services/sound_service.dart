@@ -1,5 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 class SoundService {
   // Dedizierte Player pro Sound für perfekte Performance
@@ -45,11 +46,11 @@ class SoundService {
       _isInitialized = true;
       
       if (kDebugMode) {
-        print('🔊 SoundService: Initialized with preloaded audio');
+        debugPrint('🔊 SoundService: Initialized with preloaded audio');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ SoundService init error: $e');
+        debugPrint('⚠️ SoundService init error: $e');
       }
     }
   }
@@ -71,11 +72,11 @@ class SoundService {
       await _endPlayer.setVolume(_volEnd);
       
       if (kDebugMode) {
-        print('✅ All sounds preloaded');
+        debugPrint('✅ All sounds preloaded');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ Preload error: $e');
+        debugPrint('⚠️ Preload error: $e');
       }
     }
   }
@@ -92,7 +93,7 @@ class SoundService {
         await _startPlayer.setVolume(_volStart);
       } catch (e) {
         if (kDebugMode) {
-          print('Unlock error: $e');
+          debugPrint('Unlock error: $e');
         }
       }
     }
@@ -122,29 +123,56 @@ class SoundService {
       await player.resume();
       
       if (kDebugMode) {
-        print('🔊 Playing: $soundName');
+        debugPrint('🔊 Playing: $soundName');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ Error playing $soundName: $e');
+        debugPrint('⚠️ Error playing $soundName: $e');
       }
     }
   }
 
   Future<void> playStart() async {
+    HapticFeedback.lightImpact();
     await _playFromPlayer(_startPlayer, 'start');
   }
 
   Future<void> playCorrect() async {
+    HapticFeedback.mediumImpact();
     await _playFromPlayer(_correctPlayer, 'correct');
   }
 
   Future<void> playWrong() async {
+    HapticFeedback.heavyImpact();
     await _playFromPlayer(_wrongPlayer, 'wrong');
   }
 
   Future<void> playEnd() async {
+    HapticFeedback.vibrate();
     await _playFromPlayer(_endPlayer, 'end');
+  }
+
+  Future<void> playTick() async {
+    HapticFeedback.lightImpact();
+    // Use start player for tick for now
+    await _playFromPlayer(_startPlayer, 'tick');
+  }
+
+  Future<void> playExplosion() async {
+    HapticFeedback.heavyImpact();
+    await _playFromPlayer(_endPlayer, 'explosion');
+  }
+
+  Future<void> playSuccess() async {
+    await playCorrect();
+  }
+
+  Future<void> playError() async {
+    await playWrong();
+  }
+
+  Future<void> playClick() async {
+    HapticFeedback.selectionClick();
   }
 
   void dispose() {
@@ -154,7 +182,7 @@ class SoundService {
     _endPlayer.dispose();
     
     if (kDebugMode) {
-      print('🔊 SoundService disposed');
+      debugPrint('🔊 SoundService disposed');
     }
   }
 }

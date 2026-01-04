@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:ui';
-import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
+import '../services/category_service.dart';
 import '../utils/sensor_helper.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
@@ -21,15 +21,18 @@ class StirnratenScreen extends StatefulWidget {
 }
 
 class _StirnratenScreenState extends State<StirnratenScreen> {
+  final CategoryService _categoryService = CategoryService();
   StirnratenGameState _gameState = StirnratenGameState.setup;
   List<String> _currentWords = [];
   List<Map<String, dynamic>> _results = []; // {word: String, correct: bool}
   int _score = 0;
+  int _selectedTime = 150;
   int _timeLeft = 150;
   int _countdown = 3;
   Timer? _gameTimer;
   Timer? _countdownTimer;
   String _currentWord = "";
+  bool _initialCooldownActive = false;
   
   // Sensor handling
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
@@ -67,27 +70,194 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
   void _showOwnWordsDialog() {
     final TextEditingController controller = TextEditingController();
+    final TextEditingController nameController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Eigene Wörter', style: TextStyle(color: Colors.white)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Gib deine Wörter ein (getrennt durch Komma):',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText: 'Apfel, Birne, Banane...',
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final text = controller.text;
+                        if (text.isNotEmpty) {
+                          final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                          if (words.isNotEmpty) {
+                            final name = await showDialog<String>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: const Color(0xFF1E293B),
+                                title: const Text('Liste speichern', style: TextStyle(color: Colors.white)),
+                                content: TextField(
+                                  controller: nameController,
+                                  autofocus: true,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Name der Liste (z.B. Obst)',
+                                    hintStyle: TextStyle(color: Colors.white30),
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, nameController.text),
+                                    child: const Text('Speichern'),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (name != null && name.isNotEmpty) {
+                              await _categoryService.saveCategory(name, words);
+                              nameController.clear();
+                              setDialogState(() {}); // Refresh list
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Liste gespeichert!'), duration: Duration(seconds: 1)),
+                                );
+                              }
+                            }
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.save, size: 18),
+                      label: const Text('Liste speichern'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.blue),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Gespeicherte Listen:',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<List<CustomCategory>>(
+                    future: _categoryService.getCustomCategories(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Text('Keine gespeicherten Listen', style: TextStyle(color: Colors.white30, fontSize: 12));
+                      }
+                      return Column(
+                        children: snapshot.data!.map((cat) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                            title: Text(cat.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                            subtitle: Text('${cat.words.length} Wörter', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.play_arrow, color: Colors.green, size: 20),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _startCountdownWithWords(cat.words);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                  onPressed: () async {
+                                    await _categoryService.deleteCategory(cat.name);
+                                    setDialogState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                            onTap: () {
+                              controller.text = cat.words.join(', ');
+                            },
+                          ),
+                        )).toList(),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Abbrechen', style: TextStyle(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.withOpacity(0.2),
+                foregroundColor: Colors.blue,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                final text = controller.text;
+                if (text.isNotEmpty) {
+                  final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                  if (words.isNotEmpty) {
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _startCountdownWithWords(words);
+                    }
+                  }
+                }
+              },
+              child: const Text('Starten'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTimeSelectionDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Eigene Wörter', style: TextStyle(color: Colors.white)),
+        title: const Text('Spielzeit wählen', style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Gib deine Wörter ein (getrennt durch Komma):',
+              'Wähle die Dauer der Runde in Sekunden:',
               style: TextStyle(color: Colors.white70),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
+            const SizedBox(height: 20),
+            DropdownButtonFormField<int>(
+              value: _selectedTime,
+              dropdownColor: const Color(0xFF1E293B),
               style: const TextStyle(color: Colors.white),
-              maxLines: 5,
               decoration: const InputDecoration(
-                hintText: 'Apfel, Birne, Banane...',
-                hintStyle: TextStyle(color: Colors.white30),
-                border: OutlineInputBorder(),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.white30),
                 ),
@@ -95,6 +265,20 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   borderSide: BorderSide(color: Colors.blue),
                 ),
               ),
+              items: List.generate(10, (index) => (index + 1) * 30)
+                  .map((time) => DropdownMenuItem<int>(
+                        value: time,
+                        child: Text('$time Sekunden'),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedTime = value;
+                  });
+                  Navigator.pop(context);
+                }
+              },
             ),
           ],
         ),
@@ -102,19 +286,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () {
-              final text = controller.text;
-              if (text.isNotEmpty) {
-                final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                if (words.isNotEmpty) {
-                  Navigator.pop(context);
-                  _startCountdownWithWords(words);
-                }
-              }
-            },
-            child: const Text('Starten'),
           ),
         ],
       ),
@@ -141,7 +312,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     setState(() {
       _currentWords = List.from(words)..shuffle();
       _score = 0;
-      _timeLeft = 150;
+      _timeLeft = _selectedTime;
       _results = [];
       _countdown = 3;
       _gameState = StirnratenGameState.countdown;
@@ -164,7 +335,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     
     setState(() {
       _gameState = StirnratenGameState.playing;
-      _canSkip = true;
+      _initialCooldownActive = true;
       _neutralPosition = true;
       _feedbackColor = null; // Reset any lingering feedback
     });
@@ -173,6 +344,18 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _nextWord();
     _startTimer();
     _startSensors();
+
+    // Start initial cooldown to prevent accidental skipping on start
+    Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _initialCooldownActive = false;
+        });
+        if (kDebugMode) {
+          debugPrint('🎮 Stirnraten: Initial cooldown finished');
+        }
+      }
+    });
     
     if (kDebugMode) {
       debugPrint('✅ Stirnraten: Game started successfully');
@@ -197,8 +380,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       debugPrint('🎮 Stirnraten: Starting sensor listeners...');
       if (!kIsWeb) {
         try {
-          final platform = Platform.operatingSystem;
-          debugPrint('📱 Platform: $platform');
+          debugPrint('📱 Platform: ${defaultTargetPlatform.name}');
         } catch (e) {
           debugPrint('⚠️ Platform detection failed: $e');
         }
@@ -211,11 +393,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         debugPrint('🌐 Using JavaScript tilt detection for Web');
       }
       startWebTiltDetection(() {
-        if (_gameState == StirnratenGameState.playing && _canSkip) {
+        if (_gameState == StirnratenGameState.playing && _canSkip && !_initialCooldownActive) {
           _handleCorrect();
         }
       }, () {
-        if (_gameState == StirnratenGameState.playing && _canSkip) {
+        if (_gameState == StirnratenGameState.playing && _canSkip && !_initialCooldownActive) {
           _handlePass();
         }
       });
@@ -243,7 +425,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _processSensorData(double x, double y, double z) {
-    if (_gameState != StirnratenGameState.playing || !_canSkip) return;
+    if (_gameState != StirnratenGameState.playing || !_canSkip || _initialCooldownActive) return;
 
     // Throttle: Process sensor data max every 50ms
     final now = DateTime.now();
@@ -308,7 +490,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _handleCorrect() {
-    if (!_canSkip) return;
+    if (!_canSkip || _initialCooldownActive) return;
     _canSkip = false;
     
     if (kDebugMode) {
@@ -347,7 +529,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _handlePass() {
-    if (!_canSkip) return;
+    if (!_canSkip || _initialCooldownActive) return;
     _canSkip = false;
     
     if (kDebugMode) {
@@ -415,6 +597,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A12),
+      resizeToAvoidBottomInset: false,
       body: ModernBackground(
         child: _buildBody(),
       ),
@@ -475,6 +659,28 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
               padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
               child: Column(
                 children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withAlpha(60),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(32),
+                      child: Image.asset(
+                        'assets/images/stirnraten_image.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   const Text(
                     'Stirnraten',
                     style: TextStyle(
@@ -492,6 +698,35 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                       fontWeight: FontWeight.w400,
                       color: Color(0x8CFFFFFF),
                       letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Time Selection
+                  GestureDetector(
+                    onTap: () => _showTimeSelectionDialog(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.timer_outlined, color: Colors.white70, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Zeit: $_selectedTime Sek.',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -513,6 +748,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   final colors = _getCategoryGradient(category);
                   return _CategoryCard(
                     title: StirnratenData.categoryNames[category]!,
+                    icon: StirnratenData.categoryIcons[category]!,
                     gradientColors: colors,
                     onTap: () {
                       if (category == StirnratenCategory.ownWords) {
@@ -626,6 +862,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     return Stack(
       children: [
         Container(
+          width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -680,27 +918,29 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         Positioned(
           top: 40,
           right: 28,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(20),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withAlpha(40),
-                    width: 1.5,
+          child: RepaintBoundary(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(20),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withAlpha(40),
+                      width: 1.5,
+                    ),
                   ),
-                ),
-                child: Text(
-                  '$_timeLeft',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
+                  child: Text(
+                    '$_timeLeft',
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
               ),
@@ -871,11 +1111,13 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
 class _CategoryCard extends StatefulWidget {
   final String title;
+  final IconData icon;
   final List<Color> gradientColors;
   final VoidCallback onTap;
 
   const _CategoryCard({
     required this.title,
+    required this.icon,
     required this.gradientColors,
     required this.onTap,
   });
@@ -920,22 +1162,47 @@ class _CategoryCardState extends State<_CategoryCard> {
                   width: 1.5,
                 ),
               ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    widget.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
+              child: Stack(
+                children: [
+                  // Background Icon
+                  Positioned(
+                    right: -10,
+                    bottom: -10,
+                    child: Icon(
+                      widget.icon,
+                      size: 60,
+                      color: Colors.white.withOpacity(0.15),
                     ),
                   ),
-                ),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            widget.icon,
+                            color: Colors.white.withOpacity(0.9),
+                            size: 28,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.title,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

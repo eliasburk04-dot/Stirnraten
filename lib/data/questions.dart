@@ -110,6 +110,56 @@ final List<Question> questions = [
     question: "Was ist das Meiste, das du je für ein einzelnes Kleidungsstück ausgegeben hast? (in €)",
     category: QuestionCategory.money,
   ),
+  const Question(
+    id: 60,
+    question: "Wie viel Geld hast du aktuell in deinem Portemonnaie? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 61,
+    question: "Wie viel Geld würdest du maximal für eine Jeans ausgeben? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 62,
+    question: "Wie viel Trinkgeld gibst du normalerweise im Restaurant? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 63,
+    question: "Wie viel Geld hast du schon mal verloren oder wurde dir gestohlen? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 64,
+    question: "Wie viel kostet dein teuerstes Kleidungsstück? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 65,
+    question: "Wie viel Geld sparst du monatlich? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 66,
+    question: "Wie viel Geld würdest du für ein neues Fahrrad ausgeben? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 67,
+    question: "Wie viel Geld hast du diesen Monat schon für unnötigen Kram ausgegeben? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 68,
+    question: "Wie viel Miete/Kredit zahlst du monatlich? (in €)",
+    category: QuestionCategory.money,
+  ),
+  const Question(
+    id: 69,
+    question: "Wie viel Geld würdest du für ein Abendessen zu zweit ausgeben? (in €)",
+    category: QuestionCategory.money,
+  ),
 
   // -------------------------------------------------------------------------
   // 🌟 LIFESTYLE
@@ -134,6 +184,41 @@ final List<Question> questions = [
     question: "Wie viele Minuten brauchst du morgens, um dich fertig zu machen?",
     category: QuestionCategory.lifestyle,
   ),
+  const Question(
+    id: 70,
+    question: "Wie viele Tassen Kaffee/Tee trinkst du am Tag?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 71,
+    question: "Wie viele Paar Schuhe besitzt du insgesamt?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 72,
+    question: "Wie viele Zimmer hat deine Wohnung/dein Haus?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 73,
+    question: "Wie viele Pflanzen hast du in deiner Wohnung?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 74,
+    question: "Wie viele Wecker stellst du dir morgens?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 75,
+    question: "Wie viele Kilometer fährst du durchschnittlich pro Woche mit dem Auto?",
+    category: QuestionCategory.lifestyle,
+  ),
+  const Question(
+    id: 76,
+    question: "Wie viele Stunden pro Woche verbringst du mit Hausarbeit?",
+    category: QuestionCategory.lifestyle,
+  ),
 
   // -------------------------------------------------------------------------
   // 🍕 FOOD & DRINKS
@@ -146,6 +231,46 @@ final List<Question> questions = [
   const Question(
     id: 15,
     question: "Wie viele Stücke Pizza kannst du auf einmal essen?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 80,
+    question: "Wie viele Mahlzeiten isst du am Tag?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 81,
+    question: "Wie oft pro Monat bestellst du Essen?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 82,
+    question: "Wie viele verschiedene Gewürze hast du in der Küche?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 83,
+    question: "Wie viele Eier isst du pro Woche?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 84,
+    question: "Wie viele Minuten dauert dein durchschnittliches Mittagessen?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 85,
+    question: "Wie viele verschiedene Obstsorten hast du gerade zu Hause?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 86,
+    question: "Wie oft pro Woche isst du Fleisch?",
+    category: QuestionCategory.food,
+  ),
+  const Question(
+    id: 87,
+    question: "Wie viele Kochbücher besitzt du?",
     category: QuestionCategory.food,
   ),
 
@@ -167,6 +292,46 @@ final List<Question> questions = [
     question: "Wie viele Leute würdest du zu deiner Geburtstagsparty einladen?",
     category: QuestionCategory.social,
   ),
+  const Question(
+    id: 90,
+    question: "Wie viele Kontakte hast du in deinem Telefonbuch?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 91,
+    question: "Wie viele Stunden verbringst du wöchentlich mit Freunden?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 92,
+    question: "Wie viele Geschwister hast du?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 93,
+    question: "Wie viele Hochzeiten hast du in deinem Leben schon besucht?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 94,
+    question: "Wie viele Personen hast du heute schon gegrüßt?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 95,
+    question: "Wie viele Gruppenchats hast du bei WhatsApp/Telegram?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 96,
+    question: "Wie viele Nachbarn kennst du mit Namen?",
+    category: QuestionCategory.social,
+  ),
+  const Question(
+    id: 97,
+    question: "Wie viele Telefonate führst du pro Tag?",
+    category: QuestionCategory.social,
+  ),
 
   // -------------------------------------------------------------------------
   // 💼 WORK & SCHOOL
@@ -179,6 +344,41 @@ final List<Question> questions = [
   const Question(
     id: 22,
     question: "Wie viele Krankheitstage hattest du dieses Jahr?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 100,
+    question: "Wie viele E-Mails schreibst du pro Tag?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 101,
+    question: "Wie viele verschiedene Jobs hattest du schon?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 102,
+    question: "Wie viele Minuten dauert dein Arbeitsweg (eine Strecke)?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 103,
+    question: "Wie viele Urlaubstage hast du pro Jahr?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 104,
+    question: "Wie viele Kollegen hast du in deinem direkten Team?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 105,
+    question: "Wie viele Überstunden machst du durchschnittlich pro Monat?",
+    category: QuestionCategory.work,
+  ),
+  const Question(
+    id: 106,
+    question: "Wie viele Meetings hast du durchschnittlich pro Woche?",
     category: QuestionCategory.work,
   ),
 
@@ -208,6 +408,31 @@ final List<Question> questions = [
   const Question(
     id: 30,
     question: "Wie viele Songs sind in deiner Lieblings-Playlist?",
+    category: QuestionCategory.entertainment,
+  ),
+  const Question(
+    id: 110,
+    question: "Wie viele Instrumente kannst du spielen?",
+    category: QuestionCategory.entertainment,
+  ),
+  const Question(
+    id: 111,
+    question: "Wie viele Brettspiele besitzt du?",
+    category: QuestionCategory.entertainment,
+  ),
+  const Question(
+    id: 112,
+    question: "Wie viele Konzerte hast du in deinem Leben besucht?",
+    category: QuestionCategory.entertainment,
+  ),
+  const Question(
+    id: 113,
+    question: "Wie viele YouTube-Kanäle hast du abonniert?",
+    category: QuestionCategory.entertainment,
+  ),
+  const Question(
+    id: 114,
+    question: "Wie viele Sprachen sprichst du (mindestens Grundkenntnisse)?",
     category: QuestionCategory.entertainment,
   ),
 
@@ -257,6 +482,16 @@ final List<Question> questions = [
   const Question(
     id: 39,
     question: "Wie viele Jahre Altersunterschied sind in einer Beziehung maximal okay?",
+    category: QuestionCategory.dating,
+  ),
+  const Question(
+    id: 120,
+    question: "Wie viele Liebesbriefe hast du in deinem Leben geschrieben?",
+    category: QuestionCategory.dating,
+  ),
+  const Question(
+    id: 121,
+    question: "Wie viele Küsse hattest du diese Woche schon?",
     category: QuestionCategory.dating,
   ),
 
@@ -313,6 +548,16 @@ final List<Question> questions = [
     question: "Wie viele Monate im Voraus planst du deinen Urlaub meistens?",
     category: QuestionCategory.travel,
   ),
+  const Question(
+    id: 130,
+    question: "Wie viele Städte-Trips machst du pro Jahr?",
+    category: QuestionCategory.travel,
+  ),
+  const Question(
+    id: 131,
+    question: "Wie viele Postkarten schreibst du pro Urlaub?",
+    category: QuestionCategory.travel,
+  ),
 
   // -------------------------------------------------------------------------
   // 📱 TECHNOLOGY
@@ -365,6 +610,21 @@ final List<Question> questions = [
   const Question(
     id: 59,
     question: "Wie viele Ladegeräte besitzt du insgesamt?",
+    category: QuestionCategory.technology,
+  ),
+  const Question(
+    id: 140,
+    question: "Wie viele Passwörter musst du dir ungefähr merken?",
+    category: QuestionCategory.technology,
+  ),
+  const Question(
+    id: 141,
+    question: "Wie viele Smart-Home-Geräte besitzt du?",
+    category: QuestionCategory.technology,
+  ),
+  const Question(
+    id: 142,
+    question: "Wie viele Selfies machst du pro Woche?",
     category: QuestionCategory.technology,
   ),
 ];

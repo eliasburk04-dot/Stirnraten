@@ -9,15 +9,26 @@ class Room {
   final String hostId;
   final List<Player> players;
   final GameState state;
+  final GameType gameType;
   final Question? currentQuestion;
   final Question? liarQuestion;
-  final String? liarId;
+  final List<String> liarIds;
   final int roundNumber;
   final int maxPlayers;
   final int minPlayers;
+  final int liarCount;
+  final bool specialRolesEnabled;
   final DateTime createdAt;
   final int? timerSeconds;
   final Map<String, int> scores; // Player ID -> Score
+  
+  // Bomb Party specific fields
+  final String? currentSyllable;
+  final String? activePlayerId;
+  final List<String> usedWords;
+  final Map<String, int> lives; // Player ID -> Lives
+  final int? turnEndsAt; // Timestamp in ms
+  final String? currentInput; // Real-time typing sync
 
   const Room({
     required this.id,
@@ -25,15 +36,24 @@ class Room {
     required this.hostId,
     this.players = const [],
     this.state = GameState.lobby,
+    this.gameType = GameType.liar,
     this.currentQuestion,
     this.liarQuestion,
-    this.liarId,
+    this.liarIds = const [],
     this.roundNumber = 0,
     this.maxPlayers = 10,
     this.minPlayers = 3,
+    this.liarCount = 1,
+    this.specialRolesEnabled = false,
     DateTime? createdAt,
     this.timerSeconds,
     this.scores = const {},
+    this.currentSyllable,
+    this.activePlayerId,
+    this.usedWords = const [],
+    this.lives = const {},
+    this.turnEndsAt,
+    this.currentInput,
   }) : createdAt = createdAt ?? const _DefaultDateTime();
 
   /// Create a copy with updated fields
@@ -43,15 +63,24 @@ class Room {
     String? hostId,
     List<Player>? players,
     GameState? state,
+    GameType? gameType,
     Question? currentQuestion,
     Question? liarQuestion,
-    String? liarId,
+    List<String>? liarIds,
     int? roundNumber,
     int? maxPlayers,
     int? minPlayers,
+    int? liarCount,
+    bool? specialRolesEnabled,
     DateTime? createdAt,
     int? timerSeconds,
     Map<String, int>? scores,
+    String? currentSyllable,
+    String? activePlayerId,
+    List<String>? usedWords,
+    Map<String, int>? lives,
+    int? turnEndsAt,
+    String? currentInput,
   }) {
     return Room(
       id: id ?? this.id,
@@ -59,15 +88,24 @@ class Room {
       hostId: hostId ?? this.hostId,
       players: players ?? this.players,
       state: state ?? this.state,
+      gameType: gameType ?? this.gameType,
       currentQuestion: currentQuestion ?? this.currentQuestion,
       liarQuestion: liarQuestion ?? this.liarQuestion,
-      liarId: liarId ?? this.liarId,
+      liarIds: liarIds ?? this.liarIds,
       roundNumber: roundNumber ?? this.roundNumber,
       maxPlayers: maxPlayers ?? this.maxPlayers,
       minPlayers: minPlayers ?? this.minPlayers,
+      liarCount: liarCount ?? this.liarCount,
+      specialRolesEnabled: specialRolesEnabled ?? this.specialRolesEnabled,
       createdAt: createdAt ?? this.createdAt,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       scores: scores ?? this.scores,
+      currentSyllable: currentSyllable ?? this.currentSyllable,
+      activePlayerId: activePlayerId ?? this.activePlayerId,
+      usedWords: usedWords ?? this.usedWords,
+      lives: lives ?? this.lives,
+      turnEndsAt: turnEndsAt ?? this.turnEndsAt,
+      currentInput: currentInput ?? this.currentInput,
     );
   }
 
@@ -79,15 +117,24 @@ class Room {
       'hostId': hostId,
       'players': {for (var p in players) p.id: p.toMap()},
       'state': state.name,
+      'gameType': gameType.name,
       'currentQuestion': currentQuestion?.toMap(),
       'liarQuestion': liarQuestion?.toMap(),
-      'liarId': liarId,
+      'liarIds': liarIds,
       'roundNumber': roundNumber,
       'maxPlayers': maxPlayers,
       'minPlayers': minPlayers,
+      'liarCount': liarCount,
+      'specialRolesEnabled': specialRolesEnabled,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'timerSeconds': timerSeconds,
       'scores': scores,
+      'currentSyllable': currentSyllable,
+      'activePlayerId': activePlayerId,
+      'usedWords': usedWords,
+      'lives': lives,
+      'turnEndsAt': turnEndsAt,
+      'currentInput': currentInput,
     };
   }
 
@@ -102,6 +149,10 @@ class Room {
     final scores = scoresMap.map((key, value) => 
         MapEntry(key.toString(), value as int),);
 
+    final livesMap = map['lives'] as Map<dynamic, dynamic>? ?? {};
+    final lives = livesMap.map((key, value) => 
+        MapEntry(key.toString(), value as int),);
+
     return Room(
       id: map['id'] as String,
       code: map['code'] as String,
@@ -111,21 +162,33 @@ class Room {
         (e) => e.name == map['state'],
         orElse: () => GameState.lobby,
       ),
+      gameType: GameType.values.firstWhere(
+        (e) => e.name == map['gameType'],
+        orElse: () => GameType.liar,
+      ),
       currentQuestion: map['currentQuestion'] != null
           ? Question.fromMap(Map<String, dynamic>.from(map['currentQuestion'] as Map))
           : null,
       liarQuestion: map['liarQuestion'] != null
           ? Question.fromMap(Map<String, dynamic>.from(map['liarQuestion'] as Map))
           : null,
-      liarId: map['liarId'] as String?,
+      liarIds: map['liarIds'] != null ? List<String>.from(map['liarIds'] as List) : [],
       roundNumber: map['roundNumber'] as int? ?? 0,
       maxPlayers: map['maxPlayers'] as int? ?? 10,
       minPlayers: map['minPlayers'] as int? ?? 3,
+      liarCount: map['liarCount'] as int? ?? 1,
+      specialRolesEnabled: map['specialRolesEnabled'] as bool? ?? false,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         map['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
       ),
       timerSeconds: map['timerSeconds'] as int?,
       scores: Map<String, int>.from(scores),
+      currentSyllable: map['currentSyllable'] as String?,
+      activePlayerId: map['activePlayerId'] as String?,
+      usedWords: map['usedWords'] != null ? List<String>.from(map['usedWords'] as List) : [],
+      lives: Map<String, int>.from(lives),
+      turnEndsAt: map['turnEndsAt'] as int?,
+      currentInput: map['currentInput'] as String?,
     );
   }
 
@@ -138,8 +201,8 @@ class Room {
   /// Get the host player
   Player? get host => players.where((p) => p.id == hostId).firstOrNull;
 
-  /// Get the liar player
-  Player? get liar => players.where((p) => p.id == liarId).firstOrNull;
+  /// Get the liar players
+  List<Player> get liars => players.where((p) => liarIds.contains(p.id)).toList();
 
   /// Get players who have answered
   List<Player> get playersWhoAnswered => 
@@ -181,12 +244,16 @@ class Room {
     return players.where((p) => p.id == mostVotedId).firstOrNull;
   }
 
-  /// Check if the liar was caught
-  bool get liarWasCaught => mostVotedPlayer?.id == liarId;
+  /// Check if a liar was caught
+  bool get liarWasCaught {
+    final mostVoted = mostVotedPlayer;
+    if (mostVoted == null) return false;
+    return liarIds.contains(mostVoted.id);
+  }
 
-  /// Get players who correctly identified the liar
+  /// Get players who correctly identified a liar
   List<Player> get playersWhoGuessedCorrectly =>
-      players.where((p) => p.votedFor == liarId).toList();
+      players.where((p) => liarIds.contains(p.votedFor)).toList();
 
   @override
   String toString() => 'Room(code: $code, players: ${players.length}, state: $state)';

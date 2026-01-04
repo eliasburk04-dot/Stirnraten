@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/game_service.dart';
+import '../services/sound_service.dart';
 import '../models/models.dart';
 import '../utils/theme.dart';
 import '../widgets/glass_widgets.dart';
@@ -112,6 +113,9 @@ class GameScreen extends StatelessWidget {
         return _ResultsPhase(room: room, gameService: gameService);
       case GameState.reveal:
         return _RevealPhase(room: room, gameService: gameService);
+      case GameState.playing:
+      case GameState.gameOver:
+        return const Center(child: Text('Game in progress...'));
       case GameState.lobby:
         return const Center(child: CircularProgressIndicator());
     }
@@ -177,16 +181,34 @@ class _PhaseHeader extends StatelessWidget {
   }
 }
 
-class _QuestioningPhase extends StatelessWidget {
+class _QuestioningPhase extends StatefulWidget {
   final Room room;
   final GameService gameService;
 
   const _QuestioningPhase({required this.room, required this.gameService});
 
   @override
+  State<_QuestioningPhase> createState() => _QuestioningPhaseState();
+}
+
+class _QuestioningPhaseState extends State<_QuestioningPhase> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<SoundService>().playStart();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final room = widget.room;
+    final gameService = widget.gameService;
     final question = gameService.myQuestion;
     final isHost = gameService.isHost;
+    final player = gameService.currentPlayer;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -197,6 +219,9 @@ class _QuestioningPhase extends StatelessWidget {
             subtitle: 'Lies deine Frage aufmerksam!',
             icon: Icons.quiz,
           ),
+          const SizedBox(height: 20),
+          if (player != null && player.role != PlayerRole.normal)
+            _buildRoleInfo(player, room),
           const Spacer(),
           const SizedBox(height: 24),
           GlassCard(
@@ -253,6 +278,62 @@ class _QuestioningPhase extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildRoleInfo(Player player, Room room) {
+    if (player.role == PlayerRole.detective) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        ),
+        child: const Row(
+          children: [
+            Text('🕵️', style: TextStyle(fontSize: 20)),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Detektiv-Hinweis', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text('Du spürst, dass die Fragen in dieser Runde unterschiedlich sind!', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (player.role == PlayerRole.accomplice) {
+      final otherLiars = room.liars.where((p) => p.id != player.id).map((p) => p.name).join(', ');
+      if (otherLiars.isEmpty) return const SizedBox.shrink();
+      
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Text('🤝', style: TextStyle(fontSize: 20)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Komplizen-Info', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text('Deine Mit-Lügner: $otherLiars', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 }
 
 class _AnsweringPhase extends StatefulWidget {
@@ -289,6 +370,7 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
       );
       return;
     }
+    context.read<SoundService>().playClick();
     await widget.gameService.submitAnswer(answer);
     setState(() => _hasSubmitted = true);
   }
@@ -424,29 +506,38 @@ class _AnsweringPhaseState extends State<_AnsweringPhase> {
   }
 
   Widget _buildAnsweredList() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
-      children: widget.room.players.map((player) {
-        final hasAnswered = player.hasAnswered;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: hasAnswered ? Color.fromRGBO(16,185,129,0.2) : Color.fromRGBO(255,255,255,0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: hasAnswered ? AppTheme.accentGreen : Color.fromRGBO(255,255,255,0.2)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(hasAnswered ? Icons.check : Icons.hourglass_empty, size: 14, color: hasAnswered ? AppTheme.accentGreen : Colors.white54),
-              const SizedBox(width: 6),
-              Text(player.name, style: TextStyle(fontSize: 12, color: hasAnswered ? AppTheme.accentGreen : Colors.white54)),
-            ],
-          ),
-        );
-      }).toList(),
+    return Column(
+      children: [
+        Text(
+          'Wer hat schon geantwortet?',
+          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: widget.room.players.map((player) {
+            final hasAnswered = player.hasAnswered;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: hasAnswered ? Color.fromRGBO(16,185,129,0.2) : Color.fromRGBO(255,255,255,0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: hasAnswered ? AppTheme.accentGreen : Color.fromRGBO(255,255,255,0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(hasAnswered ? Icons.check : Icons.hourglass_empty, size: 14, color: hasAnswered ? AppTheme.accentGreen : Colors.white54),
+                  const SizedBox(width: 6),
+                  Text(player.name, style: TextStyle(fontSize: 12, color: hasAnswered ? AppTheme.accentGreen : Colors.white54)),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }
@@ -505,6 +596,7 @@ class _VotingPhaseState extends State<_VotingPhase> {
 
   void _submitVote() async {
     if (_selectedPlayerId == null) return;
+    context.read<SoundService>().playClick();
     await widget.gameService.submitVote(_selectedPlayerId!);
     setState(() => _hasVoted = true);
   }
@@ -632,6 +724,10 @@ class _VotingPhaseState extends State<_VotingPhase> {
                           child: const Text('DU', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                       ],
+                      if (player.hasVoted) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 14),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -719,15 +815,32 @@ class _ResultsPhase extends StatelessWidget {
   }
 }
 
-class _RevealPhase extends StatelessWidget {
+class _RevealPhase extends StatefulWidget {
   final Room room;
   final GameService gameService;
 
   const _RevealPhase({required this.room, required this.gameService});
 
   @override
+  State<_RevealPhase> createState() => _RevealPhaseState();
+}
+
+class _RevealPhaseState extends State<_RevealPhase> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<SoundService>().playEnd();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final liar = room.players.where((p) => p.id == room.liarId).firstOrNull;
+    final room = widget.room;
+    final gameService = widget.gameService;
+    final liars = room.liars;
     final liarWasCaught = room.liarWasCaught;
 
     return Padding(
@@ -736,47 +849,65 @@ class _RevealPhase extends StatelessWidget {
         children: [
           _PhaseHeader(
             title: liarWasCaught ? 'Erwischt!' : 'Entkommen!',
-            subtitle: liarWasCaught ? 'Der Lügner wurde gefunden!' : 'Der Lügner ist entkommen!',
+            subtitle: liarWasCaught 
+                ? (liars.length > 1 ? 'Ein Lügner wurde gefunden!' : 'Der Lügner wurde gefunden!')
+                : (liars.length > 1 ? 'Die Lügner sind entkommen!' : 'Der Lügner ist entkommen!'),
             icon: liarWasCaught ? Icons.celebration : Icons.sentiment_very_dissatisfied,
             color: liarWasCaught ? AppTheme.accentGreen : AppTheme.accentRed,
           ),
           const Spacer(),
-          if (liar != null)
+          if (liars.isNotEmpty)
             Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.accentRed, width: 4),
-                  ),
-                  child: PlayerAvatar(player: liar, radius: 50),
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
+                  alignment: WrapAlignment.center,
+                  children: liars.map((liar) => Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.accentRed, width: 4),
+                        ),
+                        child: PlayerAvatar(player: liar, radius: 40),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        liar.name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  )).toList(),
                 ),
-                const SizedBox(height: 20),
-                const Text('Der Lügner war:', style: TextStyle(color: Colors.white54)),
-                const SizedBox(height: 8),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFFEF4444), Color(0xFFF59E0B)],
-                  ).createShader(bounds),
-                  child: Text(
-                    liar.name,
-                    style: const TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Die Lügner waren:',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
                 ),
                 const SizedBox(height: 24),
                 GlassCard(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      Text('Die Lügner-Frage:', style: TextStyle(fontSize: 12, color: Color.fromRGBO(255,255,255,0.5))),
+                      const Text(
+                        'Die Lügner-Frage:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color.fromRGBO(255, 255, 255, 0.5),
+                        ),
+                      ),
                       const SizedBox(height: 8),
-                      Text(room.liarQuestion?.question ?? '', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w500)),
+                      Text(
+                        room.liarQuestion?.question ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
                     ],
                   ),
                 ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:ui';
 
 import '../services/game_service.dart';
@@ -9,6 +11,7 @@ import '../utils/theme.dart';
 import '../widgets/glass_widgets.dart';
 import 'game_screen.dart';
 import 'home_screen.dart';
+import 'bomb_party_screen.dart';
 
 class LobbyScreen extends StatelessWidget {
   const LobbyScreen({super.key});
@@ -22,11 +25,17 @@ class LobbyScreen extends StatelessWidget {
 
         if (room != null && room.state != GameState.lobby) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            Widget nextScreen;
+            if (room.gameType == GameType.bombParty) {
+              nextScreen = const BombPartyScreen();
+            } else {
+              nextScreen = const GameScreen();
+            }
+
             Navigator.pushReplacement(
               context,
               PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    const GameScreen(),
+                pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
                 transitionsBuilder: (context, animation, secondaryAnimation, child) {
                   return FadeTransition(opacity: animation, child: child);
                 },
@@ -206,27 +215,36 @@ class LobbyScreen extends StatelessWidget {
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFA855F7), Color(0xFFEC4899)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.vpn_key, color: Colors.white, size: 18),
                   ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.vpn_key, color: Colors.white, size: 18),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Raum-Code',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Raum-Code',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.2,
-                ),
+              IconButton(
+                icon: const Icon(Icons.qr_code_2, color: Colors.white70),
+                onPressed: () => _showQRCodeDialog(context, code),
+                tooltip: 'QR-Code anzeigen',
               ),
             ],
           ),
@@ -599,6 +617,84 @@ class LobbyScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showQRCodeDialog(BuildContext context, String code) {
+    // Create a simple join link that is easily recognized by QR scanners
+    String baseUrl = 'https://luegnerspiel.web.app';
+    if (kIsWeb) {
+      try {
+        baseUrl = Uri.base.origin;
+      } catch (e) {
+        // Fallback to default URL if Uri.base fails
+      }
+    }
+    final String joinUrl = '$baseUrl/?code=$code';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Beitreten',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Scanne diesen Code zum Beitreten',
+              style: TextStyle(color: Colors.black.withOpacity(0.6), fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: QrImageView(
+                data: joinUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              code,
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 8,
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Schließen',
+                style: TextStyle(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

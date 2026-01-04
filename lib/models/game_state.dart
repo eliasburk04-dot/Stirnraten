@@ -1,12 +1,22 @@
+/// Game type enum
+enum GameType {
+  liar,
+  bombParty,
+}
+
 /// Game state enum representing the current phase of the game
 enum GameState {
   lobby,      // Waiting for players to join
-  questioning, // Question is being displayed
-  answering,   // Players are submitting answers
-  waiting,     // Waiting for all answers
-  voting,      // Players voting on who the liar is
-  results,     // Showing results before reveal
-  reveal,      // Revealing the liar
+  // Liar specific states
+  questioning, 
+  answering,   
+  waiting,     
+  voting,      
+  results,     
+  reveal,      
+  // Bomb Party specific states
+  playing,
+  gameOver,
 }
 
 extension GameStateExtension on GameState {
@@ -26,6 +36,10 @@ extension GameStateExtension on GameState {
         return 'Results';
       case GameState.reveal:
         return 'Reveal';
+      case GameState.playing:
+        return 'Playing';
+      case GameState.gameOver:
+        return 'Game Over';
     }
   }
 
@@ -38,13 +52,17 @@ extension GameStateExtension on GameState {
       case GameState.answering:
         return 'Enter your answer';
       case GameState.waiting:
-        return 'Waiting for everyone to answer...';
+        return 'Waiting for others...';
       case GameState.voting:
-        return 'Who do you think had a different question?';
+        return 'Who is the liar?';
       case GameState.results:
-        return 'See how everyone voted';
+        return 'The results are in!';
       case GameState.reveal:
         return 'The truth is revealed!';
+      case GameState.playing:
+        return 'Your turn!';
+      case GameState.gameOver:
+        return 'Game Over!';
     }
   }
 }

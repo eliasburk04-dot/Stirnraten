@@ -8,10 +8,10 @@ import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
 import 'stirnraten_screen.dart';
 
-const Color _homePrimary = Color(0xFFF9F506);
-const Color _homeBackground = Color(0xFF1A1A0F);
-const Color _homeSurface = Color(0xFF23220F);
-const Color _homeGlass = Color(0x6623220F);
+const Color _homePrimary = Color(0xFF38BDF8);
+const Color _homeBackground = Color(0xFF0B0F1A);
+const Color _homeSurface = Color(0xFF141A26);
+const Color _homeGlass = Color(0x66141A26);
 const Color _homeBorder = Color(0x14FFFFFF);
 const double _homeCardRadius = 24;
 
@@ -521,7 +521,7 @@ class _AnimatedBackground extends StatelessWidget {
             ),
             _GlowOrb(
               size: 220,
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+              color: const Color(0xFF60A5FA).withValues(alpha: 0.14),
               offset: Offset(-80 + driftY, -40 - driftX),
               alignment: Alignment.topLeft,
               blurRadius: 120,

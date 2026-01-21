@@ -222,6 +222,7 @@ class TiltController {
     this.onTiltForward = options.onTiltForward || (() => {});
     this.onTiltBackward = options.onTiltBackward || (() => {});
     this.onReset = options.onReset || (() => {});
+    this.onOrientation = options.onOrientation || (() => {});
     
     // Schwellenwerte für Neigung (in Grad)
     this.forwardThreshold = options.forwardThreshold || 25;
@@ -230,16 +231,18 @@ class TiltController {
     
     this.currentState = 'neutral'; // 'neutral', 'forward', 'backward'
     this.isActive = false;
+    this._boundHandleOrientation = this.handleOrientation.bind(this);
   }
   
   // Starte die Sensor-Überwachung
-  async start() {
+  async start(options = {}) {
+    const shouldRequestPermission = options.requestPermission !== false;
     if (typeof DeviceOrientationEvent === 'undefined') {
       throw new Error('DeviceOrientation wird nicht unterstützt');
     }
     
     // iOS 13+ benötigt Berechtigung
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    if (shouldRequestPermission && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
         const permission = await DeviceOrientationEvent.requestPermission();
         if (permission !== 'granted') {
@@ -251,14 +254,14 @@ class TiltController {
     }
     
     this.isActive = true;
-    window.addEventListener('deviceorientation', this.handleOrientation.bind(this));
+    window.addEventListener('deviceorientation', this._boundHandleOrientation);
     console.log('Tilt-Controller gestartet');
   }
   
   // Stoppe die Sensor-Überwachung
   stop() {
     this.isActive = false;
-    window.removeEventListener('deviceorientation', this.handleOrientation.bind(this));
+    window.removeEventListener('deviceorientation', this._boundHandleOrientation);
     console.log('Tilt-Controller gestoppt');
   }
   
@@ -277,6 +280,7 @@ class TiltController {
     // const alpha = event.alpha;
     
     if (beta === null || gamma === null) return;
+    this.onOrientation(event);
     
     // Korrektur für Querformat: 
     // Im Querformat ist die Interpretation anders
@@ -361,3 +365,71 @@ document.getElementById('startBtn').addEventListener('click', async () => {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = TiltController;
 }
+
+(function () {
+  if (typeof window === 'undefined') return;
+
+  if (!window.latestAccelerometerData) {
+    window.latestAccelerometerData = { x: 0, y: 0, z: 0 };
+  }
+  if (typeof window.sensorAvailable !== 'boolean') {
+    window.sensorAvailable = false;
+  }
+
+  function updateLatest(event) {
+    if (!event) return;
+    const beta = event.beta;
+    const gamma = event.gamma;
+    const alpha = event.alpha;
+    if (beta == null && gamma == null && alpha == null) return;
+    window.sensorAvailable = true;
+    window.latestAccelerometerData.x = beta ?? 0;
+    window.latestAccelerometerData.y = gamma ?? 0;
+    window.latestAccelerometerData.z = alpha ?? 0;
+  }
+
+  window.requestDeviceMotionPermission = async function () {
+    if (typeof DeviceOrientationEvent === 'undefined') {
+      return false;
+    }
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const result = await DeviceOrientationEvent.requestPermission();
+        return result === 'granted';
+      } catch (error) {
+        console.warn('requestDeviceMotionPermission failed', error);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  let controller = null;
+
+  window.tiltDetection = {
+    start: function (correctCallback, passCallback) {
+      window.sensorAvailable = false;
+      if (controller) {
+        controller.stop();
+      }
+      controller = new TiltController({
+        onTiltForward:
+          typeof correctCallback === 'function' ? correctCallback : () => {},
+        onTiltBackward:
+          typeof passCallback === 'function' ? passCallback : () => {},
+        onReset: () => {},
+        onOrientation: updateLatest,
+      });
+      controller
+        .start({ requestPermission: false })
+        .catch((error) =>
+          console.warn('Failed to start tilt detection', error),
+        );
+    },
+    stop: function () {
+      if (!controller) return;
+      controller.stop();
+      controller = null;
+    },
+  };
+})();

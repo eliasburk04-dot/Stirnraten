@@ -14,10 +14,10 @@ import '../utils/sensor_helper.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
 
-const Color _categoryPrimary = Color(0xFFF9F506);
-const Color _categoryBackground = Color(0xFF1A1A0F);
-const Color _categorySurface = Color(0xFF23220F);
-const Color _categoryGlass = Color(0x6623220F);
+const Color _categoryPrimary = Color(0xFF38BDF8);
+const Color _categoryBackground = Color(0xFF0B0F1A);
+const Color _categorySurface = Color(0xFF141A26);
+const Color _categoryGlass = Color(0x66141A26);
 const Color _categoryBorder = Color(0x14FFFFFF);
 const double _categoryCardRadius = 24;
 
@@ -48,7 +48,7 @@ Color _gameModeAccent(GameMode mode) {
     case GameMode.suddenDeath:
       return const Color(0xFFEF4444);
     case GameMode.hardcore:
-      return const Color(0xFFF59E0B);
+      return const Color(0xFF06B6D4);
     case GameMode.drinking:
       return const Color(0xFF4ADE80);
   }
@@ -878,7 +878,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
     final outOfTime = updatedTime == 0;
     _showFeedback(
-      const Color(0xCCF59E0B),
+      const Color(0xCC06B6D4),
       label: '-${_hardcoreSkipPenaltySeconds}s',
       durationMs: 450,
       onFinished: () {
@@ -905,7 +905,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     context.read<SoundService>().playWrong();
 
     _showFeedback(
-      const Color(0xCCF59E0B),
+      const Color(0xCC06B6D4),
       label: 'Trink ${_drinkingSkipSips} Schluck',
       durationMs: 550,
       onFinished: () {
@@ -1182,9 +1182,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   List<Color> _getCategoryGradient(StirnratenCategory category) {
     switch (category) {
       case StirnratenCategory.anime:
-        return [const Color(0xFFEF4444), const Color(0xFFF59E0B)];
+        return [const Color(0xFFEF4444), const Color(0xFFEC4899)];
       case StirnratenCategory.starWars:
-        return [const Color(0xFFF59E0B), const Color(0xFFF1C40F)];
+        return [const Color(0xFF0EA5E9), const Color(0xFF6366F1)];
       case StirnratenCategory.films:
         return [const Color(0xFF10B981), const Color(0xFF059669)];
       case StirnratenCategory.series:
@@ -1206,7 +1206,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       case StirnratenCategory.sports:
         return [const Color(0xFF22C55E), const Color(0xFF16A34A)];
       case StirnratenCategory.kids:
-        return [const Color(0xFFF59E0B), const Color(0xFFFBBF24)];
+        return [const Color(0xFF22D3EE), const Color(0xFF38BDF8)];
       case StirnratenCategory.mythology:
         return [const Color(0xFF8E44AD), const Color(0xFF7C3AED)];
       case StirnratenCategory.plants:
@@ -1230,7 +1230,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       case StirnratenCategory.pantomime:
         return [const Color(0xFF10B981), const Color(0xFF34D399)];
       case StirnratenCategory.noises:
-        return [const Color(0xFFF59E0B), const Color(0xFFFCD34D)];
+        return [const Color(0xFF06B6D4), const Color(0xFF22D3EE)];
       case StirnratenCategory.household:
         return [const Color(0xFF6B7280), const Color(0xFF9CA3AF)];
       case StirnratenCategory.bodyParts:
@@ -1240,7 +1240,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       case StirnratenCategory.cities:
         return [const Color(0xFF3B82F6), const Color(0xFF60A5FA)];
       case StirnratenCategory.festivals:
-        return [const Color(0xFFF59E0B), const Color(0xFFFCD34D)];
+        return [const Color(0xFF3B82F6), const Color(0xFF60A5FA)];
       case StirnratenCategory.feelings:
         return [const Color(0xFFEF4444), const Color(0xFFF87171)];
       case StirnratenCategory.ownWords:
@@ -1345,38 +1345,14 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           child: _ModeBadge(mode: _activeGameMode),
         ),
 
-        if (_showFallbackButtons)
-          Positioned(
-            bottom: 96,
-            left: 24,
-            right: 24,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _FallbackActionButton(
-                    label: 'Passen',
-                    color: const Color(0xFFF59E0B),
-                    onTap: _handlePass,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _FallbackActionButton(
-                    label: 'Richtig',
-                    color: const Color(0xFF10B981),
-                    onTap: _handleCorrect,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
         Positioned(
           bottom: 40,
           left: 0,
           right: 0,
           child: Text(
-            _showFallbackButtons ? 'Tippen zum Antworten' : 'Kippen zum Antworten',
+            _showFallbackButtons
+                ? 'Sensor nicht verfuegbar'
+                : 'Kippen zum Antworten',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0x80FFFFFF),
@@ -1464,7 +1440,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 style: const TextStyle(
                   fontSize: 72,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFFF59E0B),
+                  color: _categoryPrimary,
                   letterSpacing: -2,
                 ),
               ),
@@ -1535,8 +1511,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 text: 'Nochmal spielen',
                 isFullWidth: true,
                 gradientColors: const [
-                  Color(0xFFEF4444),
-                  Color(0xFFF59E0B),
+                  Color(0xFF3B82F6),
+                  Color(0xFF22D3EE),
                 ],
                 onPressed: () {
                   setState(() {
@@ -1621,6 +1597,7 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isAnime = widget.data.category == StirnratenCategory.anime;
     final accent = widget.data.accentColor ?? _categoryPrimary;
     final borderColor = widget.isSelected
         ? _categoryPrimary
@@ -1648,7 +1625,7 @@ class _CategoryCardState extends State<_CategoryCard> {
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.all(16),
+                padding: isAnime ? EdgeInsets.zero : const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: _categoryGlass,
                   borderRadius: BorderRadius.circular(_categoryCardRadius),
@@ -1668,82 +1645,100 @@ class _CategoryCardState extends State<_CategoryCard> {
                         ]
                       : null,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _CategoryIconBadge(
-                          icon: widget.data.icon,
-                          accent: accent,
-                        ),
-                        const Spacer(),
-                        if (widget.data.isNsfw || widget.isSelected)
-                          Wrap(
-                            spacing: 6,
+                child: isAnime
+                    ? LayoutBuilder(
+                        builder: (context, constraints) {
+                          final height = constraints.maxWidth * 1.05;
+                          return SizedBox(
+                            height: height,
+                            width: double.infinity,
+                            child: ClipRRect(
+                              borderRadius:
+                                  BorderRadius.circular(_categoryCardRadius),
+                              child: Image.asset(
+                                'assets/images/Anime.png',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              if (widget.data.isNsfw)
-                                const _CategoryBadge(
-                                  label: '18+',
-                                  background: Color(0xFFB91C1C),
-                                  textColor: Colors.white,
-                                ),
-                              if (widget.isSelected)
-                                const _CategoryBadge(
-                                  label: 'SELECTED',
-                                  background: _categoryPrimary,
-                                  textColor: _categoryBackground,
+                              _CategoryIconBadge(
+                                icon: widget.data.icon,
+                                accent: accent,
+                              ),
+                              const Spacer(),
+                              if (widget.data.isNsfw || widget.isSelected)
+                                Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    if (widget.data.isNsfw)
+                                      const _CategoryBadge(
+                                        label: '18+',
+                                        background: Color(0xFFB91C1C),
+                                        textColor: Colors.white,
+                                      ),
+                                    if (widget.isSelected)
+                                      const _CategoryBadge(
+                                        label: 'SELECTED',
+                                        background: _categoryPrimary,
+                                        textColor: _categoryBackground,
+                                      ),
+                                  ],
                                 ),
                             ],
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.data.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: 0.2,
+                          const SizedBox(height: 12),
+                          Text(
+                            widget.data.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.data.subtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          if (widget.data.tags.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: widget.data.tags
+                                  .map(
+                                    (tag) => _TagChip(
+                                      label: tag,
+                                      color: accent,
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                          if (widget.data.progress != null ||
+                              widget.data.difficulty != null) ...[
+                            const SizedBox(height: 10),
+                            _CategoryProgress(
+                              progress: widget.data.progress,
+                              difficulty: widget.data.difficulty,
+                              accent: accent,
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.data.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.6),
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    if (widget.data.tags.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: widget.data.tags
-                            .map(
-                              (tag) => _TagChip(
-                                label: tag,
-                                color: accent,
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                    if (widget.data.progress != null ||
-                        widget.data.difficulty != null) ...[
-                      const SizedBox(height: 10),
-                      _CategoryProgress(
-                        progress: widget.data.progress,
-                        difficulty: widget.data.difficulty,
-                        accent: accent,
-                      ),
-                    ],
-                  ],
-                ),
               ),
             ),
           ),
@@ -2085,43 +2080,6 @@ class _ModeBadge extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FallbackActionButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _FallbackActionButton({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withValues(alpha: 0.18),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: color.withValues(alpha: 0.7)),
-        ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
       ),
     );
   }
@@ -2615,7 +2573,7 @@ class _CategoryBackground extends StatelessWidget {
             top: 140,
             left: -90,
             child: _GlowOrb(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+              color: const Color(0xFF60A5FA).withValues(alpha: 0.12),
               size: 220,
             ),
           ),

@@ -128,8 +128,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   constraints.maxHeight - (verticalPadding * 2),
                 );
                 final heroHeight = min(
-                  360.0,
-                  max(260.0, constraints.maxHeight * 0.42),
+                  520.0,
+                  max(320.0, constraints.maxHeight * 0.6),
                 );
 
                 return Center(
@@ -302,51 +302,79 @@ class _StartCardState extends State<_StartCard> {
           borderRadius: BorderRadius.circular(_homeCardRadius),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-              decoration: BoxDecoration(
-                color: _homeGlass,
-                borderRadius: BorderRadius.circular(_homeCardRadius),
-                border: Border.all(color: _homeBorder),
-                boxShadow: _hovered
-                    ? [
-                        BoxShadow(
-                          color: _homePrimary.withValues(alpha: 0.18),
-                          blurRadius: 26,
-                          offset: const Offset(0, 12),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(_homeCardRadius),
+                  border: Border.all(color: _homeBorder),
+                  boxShadow: _hovered
+                      ? [
+                          BoxShadow(
+                            color: _homePrimary.withValues(alpha: 0.18),
+                            blurRadius: 26,
+                            offset: const Offset(0, 12),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Image.asset(
+                        'assets/images/stirnraten_image.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.15),
+                              Colors.black.withValues(alpha: 0.55),
+                            ],
+                          ),
                         ),
-                      ]
-                    : null,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ModePill(pulse: widget.pulse),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Setz das Handy\nan die Stirn.',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                      letterSpacing: 0.2,
-                      color: Colors.white,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Das Team erkl\u00e4rt. Du r\u00e4tst.',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
-                      color: Colors.white.withValues(alpha: 0.65),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 22,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ModePill(pulse: widget.pulse),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Setz das Handy\nan die Stirn.',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              height: 1.15,
+                              letterSpacing: 0.2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Das Team erkl\u00e4rt. Du r\u00e4tst.',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              height: 1.4,
+                              color: Colors.white.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ),
         ),
       ),

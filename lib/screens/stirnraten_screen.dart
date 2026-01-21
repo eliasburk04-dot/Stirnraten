@@ -532,8 +532,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     // Unlock audio context on user interaction
     context.read<SoundService>().unlock();
 
-    // Request sensor permission (Web/iOS)
-    _sensorPermissionGranted = await requestSensorPermission();
+    // Request sensor permission (iOS/Android only)
+    _sensorPermissionGranted =
+        kIsWeb ? true : await requestSensorPermission();
 
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
@@ -585,7 +586,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     setState(() {
       _gameState = StirnratenGameState.playing;
       _feedbackColor = null; // Reset any lingering feedback
-      _showFallbackButtons = !_sensorPermissionGranted;
+      _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
     });
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (kIsWeb) {
@@ -595,10 +596,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
     _receivedSensorEvent = false;
     _sensorAvailabilityTimer?.cancel();
-    _sensorAvailabilityTimer = Timer(
-      const Duration(milliseconds: 1200),
-      _checkSensorAvailability,
-    );
+    if (!kIsWeb) {
+      _sensorAvailabilityTimer = Timer(
+        const Duration(milliseconds: 1200),
+        _checkSensorAvailability,
+      );
+    }
 
     context.read<SoundService>().playStart();
     _nextWord();
@@ -623,7 +626,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   void _startSensors() {
     // Cancel existing subscription if any
     _accelerometerSubscription?.cancel();
-    
+
     if (kDebugMode) {
       debugPrint('🎮 Stirnraten: Starting sensor listeners...');
       if (!kIsWeb) {
@@ -636,36 +639,27 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
     
     if (kIsWeb) {
-      // Web: Use JavaScript-based tilt detection
       if (kDebugMode) {
-        debugPrint('🌐 Using JavaScript tilt detection for Web');
+        debugPrint('🌐 Web tilt disabled (tap left/right instead)');
       }
-      startWebTiltDetection(() {
-        if (_gameState == StirnratenGameState.playing && _canSkip) {
-          _handleCorrect();
-        }
-      }, () {
-        if (_gameState == StirnratenGameState.playing && _canSkip) {
-          _handlePass();
-        }
-      });
-    } else {
-      // Mobile: Use Dart sensor stream
-      if (kDebugMode) {
-        debugPrint('📱 Using Dart sensor stream for Mobile');
-      }
-      _accelerometerSubscription = accelerometerEventStream().listen(
-        (AccelerometerEvent event) {
-          _processSensorData(event.x, event.y, event.z);
-        },
-        onError: (error) {
-          if (kDebugMode) {
-            print('⚠️ Sensor error: $error');
-          }
-        },
-        cancelOnError: false,
-      );
+      return;
     }
+
+    // Mobile: Use Dart sensor stream
+    if (kDebugMode) {
+      debugPrint('📱 Using Dart sensor stream for Mobile');
+    }
+    _accelerometerSubscription = accelerometerEventStream().listen(
+      (AccelerometerEvent event) {
+        _processSensorData(event.x, event.y, event.z);
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('⚠️ Sensor error: $error');
+        }
+      },
+      cancelOnError: false,
+    );
     
     if (kDebugMode) {
       debugPrint('✅ Sensor listeners activated');
@@ -718,6 +712,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _checkSensorAvailability() {
+    if (kIsWeb) return;
     if (!mounted || _gameState != StirnratenGameState.playing) return;
     if (_receivedSensorEvent) return;
     final webAvailable = kIsWeb ? getWebSensorAvailable() : _receivedSensorEvent;
@@ -1018,9 +1013,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     return StirnratenCategory.values.map((category) {
       final title = StirnratenData.categoryNames[category] ?? category.name;
       final wordCount = StirnratenData.getWords(category).length;
-      final subtitle = category == StirnratenCategory.ownWords
-          ? 'Custom lists'
-          : '$wordCount+ words';
+      final subtitle =
+          category == StirnratenCategory.ownWords ? 'Custom lists' : '';
       final tags = wordCount >= 120 ? const ['POPULAR'] : const <String>[];
       final difficulty = wordCount >= 140 ? 'HARD' : null;
       final progress = wordCount >= 140 ? 0.75 : null;
@@ -1350,9 +1344,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           left: 0,
           right: 0,
           child: Text(
-            _showFallbackButtons
-                ? 'Sensor nicht verfuegbar'
-                : 'Kippen zum Antworten',
+            kIsWeb
+                ? 'Tippen zum Antworten'
+                : (_showFallbackButtons
+                    ? 'Sensor nicht verfuegbar'
+                    : 'Kippen zum Antworten'),
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0x80FFFFFF),
@@ -1597,7 +1593,6 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isAnime = widget.data.category == StirnratenCategory.anime;
     final accent = widget.data.accentColor ?? _categoryPrimary;
     final borderColor = widget.isSelected
         ? _categoryPrimary
@@ -1625,7 +1620,7 @@ class _CategoryCardState extends State<_CategoryCard> {
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                padding: isAnime ? EdgeInsets.zero : const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: _categoryGlass,
                   borderRadius: BorderRadius.circular(_categoryCardRadius),
@@ -1645,100 +1640,84 @@ class _CategoryCardState extends State<_CategoryCard> {
                         ]
                       : null,
                 ),
-                child: isAnime
-                    ? LayoutBuilder(
-                        builder: (context, constraints) {
-                          final height = constraints.maxWidth * 1.05;
-                          return SizedBox(
-                            height: height,
-                            width: double.infinity,
-                            child: ClipRRect(
-                              borderRadius:
-                                  BorderRadius.circular(_categoryCardRadius),
-                              child: Image.asset(
-                                'assets/images/Anime.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _CategoryIconBadge(
+                          icon: widget.data.icon,
+                          accent: accent,
+                        ),
+                        const Spacer(),
+                        if (widget.data.isNsfw || widget.isSelected)
+                          Wrap(
+                            spacing: 6,
                             children: [
-                              _CategoryIconBadge(
-                                icon: widget.data.icon,
-                                accent: accent,
-                              ),
-                              const Spacer(),
-                              if (widget.data.isNsfw || widget.isSelected)
-                                Wrap(
-                                  spacing: 6,
-                                  children: [
-                                    if (widget.data.isNsfw)
-                                      const _CategoryBadge(
-                                        label: '18+',
-                                        background: Color(0xFFB91C1C),
-                                        textColor: Colors.white,
-                                      ),
-                                    if (widget.isSelected)
-                                      const _CategoryBadge(
-                                        label: 'SELECTED',
-                                        background: _categoryPrimary,
-                                        textColor: _categoryBackground,
-                                      ),
-                                  ],
+                              if (widget.data.isNsfw)
+                                const _CategoryBadge(
+                                  label: '18+',
+                                  background: Color(0xFFB91C1C),
+                                  textColor: Colors.white,
+                                ),
+                              if (widget.isSelected)
+                                const _CategoryBadge(
+                                  label: 'SELECTED',
+                                  background: _categoryPrimary,
+                                  textColor: _categoryBackground,
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Text(
-                            widget.data.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.data.subtitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: 0.6),
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                          if (widget.data.tags.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: widget.data.tags
-                                  .map(
-                                    (tag) => _TagChip(
-                                      label: tag,
-                                      color: accent,
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ],
-                          if (widget.data.progress != null ||
-                              widget.data.difficulty != null) ...[
-                            const SizedBox(height: 10),
-                            _CategoryProgress(
-                              progress: widget.data.progress,
-                              difficulty: widget.data.difficulty,
-                              accent: accent,
-                            ),
-                          ],
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.data.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
                       ),
+                    ),
+                    if (widget.data.subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.data.subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.6),
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                    if (widget.data.tags.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: widget.data.tags
+                            .map(
+                              (tag) => _TagChip(
+                                label: tag,
+                                color: accent,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    if (widget.data.progress != null ||
+                        widget.data.difficulty != null) ...[
+                      const SizedBox(height: 10),
+                      _CategoryProgress(
+                        progress: widget.data.progress,
+                        difficulty: widget.data.difficulty,
+                        accent: accent,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1928,7 +1907,8 @@ class _BottomActionBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -1940,9 +1920,12 @@ class _BottomActionBar extends StatelessWidget {
               ],
             ),
           ),
-          child: _PrimaryActionButton(
-            label: 'Play ($selectedCount Selected)',
-            onTap: onPressed,
+          child: SizedBox(
+            width: double.infinity,
+            child: _PrimaryActionButton(
+              label: 'Play ($selectedCount Selected)',
+              onTap: onPressed,
+            ),
           ),
         ),
       ),
@@ -1975,8 +1958,7 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
   @override
   Widget build(BuildContext context) {
     final isEnabled = widget.onTap != null;
-    final backgroundColor =
-        isEnabled ? _categoryPrimary : _categorySurface.withValues(alpha: 0.6);
+    final backgroundColor = isEnabled ? _categoryPrimary : _categorySurface;
     final foregroundColor =
         isEnabled ? _categoryBackground : Colors.white.withValues(alpha: 0.4);
 
@@ -1991,6 +1973,7 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
         curve: Curves.easeOut,
         child: Container(
           height: 56,
+          width: double.infinity,
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: BorderRadius.circular(999),

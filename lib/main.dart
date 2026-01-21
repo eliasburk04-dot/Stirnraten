@@ -1,35 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 
-import 'firebase_options.dart';
-import 'services/game_service.dart';
-import 'services/sound_service.dart';
 import 'screens/home_screen.dart';
-import 'utils/theme.dart';
+import 'services/sound_service.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const LuegnerApp());
+  runApp(const StirnratenApp());
 }
 
-class LuegnerApp extends StatelessWidget {
-  const LuegnerApp({super.key});
+class StirnratenApp extends StatelessWidget {
+  const StirnratenApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => GameService()),
-        Provider(create: (context) => SoundService(), dispose: (_, service) => service.dispose()),
+        Provider(
+          create: (context) => SoundService(),
+          dispose: (_, service) => service.dispose(),
+        ),
       ],
       child: MaterialApp(
-        title: 'Lügner - The Liar Game',
+        title: 'Stirnraten',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
+        theme: ThemeData.dark(),
         home: const HomeScreen(),
       ),
     );

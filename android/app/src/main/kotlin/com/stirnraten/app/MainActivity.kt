@@ -1,4 +1,4 @@
-package com.example.luegner_spiel
+package com.stirnraten.app
 
 import io.flutter.embedding.android.FlutterActivity
 

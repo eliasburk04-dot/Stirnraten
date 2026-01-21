@@ -1,11 +1,11 @@
 {
-    "name": "luegner_spiel",
-    "short_name": "luegner_spiel",
+    "name": "Stirnraten",
+    "short_name": "Stirnraten",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Party guessing game for Stirnraten.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

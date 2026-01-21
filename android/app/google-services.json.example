@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "YOUR_APP_ID",
         "android_client_info": {
-          "package_name": "com.luegnerspiel.luegner_spiel"
+          "package_name": "com.stirnraten.app"
         }
       },
       "api_key": [

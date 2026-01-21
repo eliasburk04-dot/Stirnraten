@@ -23,6 +23,7 @@ class StirnratenScreen extends StatefulWidget {
 class _StirnratenScreenState extends State<StirnratenScreen> {
   final CategoryService _categoryService = CategoryService();
   StirnratenGameState _gameState = StirnratenGameState.setup;
+  final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   List<String> _currentWords = [];
   List<Map<String, dynamic>> _results = []; // {word: String, correct: bool}
   int _score = 0;
@@ -292,8 +293,27 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     );
   }
 
-  void _startCountdown(StirnratenCategory category) {
-    _startCountdownWithWords(StirnratenData.getWords(category));
+  void _toggleCategory(StirnratenCategory category) {
+    setState(() {
+      if (_selectedCategories.contains(category)) {
+        _selectedCategories.remove(category);
+      } else {
+        _selectedCategories.add(category);
+      }
+    });
+  }
+
+  void _clearSelection() {
+    setState(() => _selectedCategories.clear());
+  }
+
+  void _startSelectedCategories() {
+    if (_selectedCategories.isEmpty) return;
+    final words = _selectedCategories
+        .expand((category) => StirnratenData.getWords(category))
+        .toList();
+    if (words.isEmpty) return;
+    _startCountdownWithWords(words);
   }
 
   void _startCountdownWithWords(List<String> words) async {
@@ -692,7 +712,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Wähle eine Kategorie',
+                    'Waehle eine oder mehrere Kategorien',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
@@ -746,20 +766,65 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 (context, index) {
                   final category = StirnratenCategory.values[index];
                   final colors = _getCategoryGradient(category);
+                  final isOwnWords = category == StirnratenCategory.ownWords;
                   return _CategoryCard(
                     title: StirnratenData.categoryNames[category]!,
                     icon: StirnratenData.categoryIcons[category]!,
                     gradientColors: colors,
+                    isSelected:
+                        !isOwnWords && _selectedCategories.contains(category),
                     onTap: () {
-                      if (category == StirnratenCategory.ownWords) {
+                      if (isOwnWords) {
                         _showOwnWordsDialog();
                       } else {
-                        _startCountdown(category);
+                        _toggleCategory(category);
                       }
                     },
                   );
                 },
                 childCount: StirnratenCategory.values.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 8),
+              child: Column(
+                children: [
+                  Text(
+                    _selectedCategories.isEmpty
+                        ? 'Keine Kategorien ausgewaehlt'
+                        : '${_selectedCategories.length} Kategorie'
+                            '${_selectedCategories.length == 1 ? '' : 'n'} '
+                            'ausgewaehlt',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xB3FFFFFF),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GlassButton(
+                    text: 'Auswahl starten',
+                    isFullWidth: true,
+                    gradientColors: const [
+                      Color(0xFFEF4444),
+                      Color(0xFFF59E0B),
+                    ],
+                    onPressed: _selectedCategories.isEmpty
+                        ? null
+                        : _startSelectedCategories,
+                  ),
+                  if (_selectedCategories.isNotEmpty)
+                    TextButton(
+                      onPressed: _clearSelection,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                      ),
+                      child: const Text('Auswahl leeren'),
+                    ),
+                ],
               ),
             ),
           ),
@@ -1113,12 +1178,14 @@ class _CategoryCard extends StatefulWidget {
   final String title;
   final IconData icon;
   final List<Color> gradientColors;
+  final bool isSelected;
   final VoidCallback onTap;
 
   const _CategoryCard({
     required this.title,
     required this.icon,
     required this.gradientColors,
+    this.isSelected = false,
     required this.onTap,
   });
 
@@ -1131,6 +1198,14 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isSelected = widget.isSelected;
+    final borderColor = isSelected
+        ? Colors.white.withOpacity(0.7)
+        : widget.gradientColors[0].withAlpha(102);
+    final startColor =
+        widget.gradientColors[0].withAlpha(isSelected ? 90 : 51);
+    final endColor = widget.gradientColors[1].withAlpha(isSelected ? 60 : 26);
+
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) {
@@ -1146,21 +1221,31 @@ class _CategoryCardState extends State<_CategoryCard> {
           borderRadius: BorderRadius.circular(20),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    widget.gradientColors[0].withAlpha(51),
-                    widget.gradientColors[1].withAlpha(26),
+                    startColor,
+                    endColor,
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: widget.gradientColors[0].withAlpha(102),
+                  color: borderColor,
                   width: 1.5,
                 ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: widget.gradientColors[0].withOpacity(0.35),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : null,
               ),
               child: Stack(
                 children: [
@@ -1171,9 +1256,17 @@ class _CategoryCardState extends State<_CategoryCard> {
                     child: Icon(
                       widget.icon,
                       size: 60,
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withOpacity(
+                        isSelected ? 0.22 : 0.15,
+                      ),
                     ),
                   ),
+                  if (isSelected)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.white.withOpacity(0.08),
+                      ),
+                    ),
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -1182,7 +1275,9 @@ class _CategoryCardState extends State<_CategoryCard> {
                         children: [
                           Icon(
                             widget.icon,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withOpacity(
+                              isSelected ? 1.0 : 0.9,
+                            ),
                             size: 28,
                           ),
                           const SizedBox(height: 8),
@@ -1202,6 +1297,27 @@ class _CategoryCardState extends State<_CategoryCard> {
                       ),
                     ),
                   ),
+                  if (isSelected)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.6),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

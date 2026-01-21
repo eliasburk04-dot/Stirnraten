@@ -3,11 +3,17 @@ import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 
+JSFunction? _correctCallbackRef;
+JSFunction? _passCallbackRef;
+
 @JS('requestDeviceMotionPermission')
 external JSPromise<JSBoolean> _requestDeviceMotionPermission();
 
 @JS('latestAccelerometerData')
 external JSObject get _latestAccelerometerData;
+
+@JS('sensorAvailable')
+external JSBoolean get _sensorAvailable;
 
 @JS('tiltDetection.start')
 external void _startTiltDetection(
@@ -39,6 +45,14 @@ List<double> getWebAccelerometerData() {
   return [0.0, 0.0, 0.0];
 }
 
+bool getWebSensorAvailable() {
+  try {
+    return _sensorAvailable.toDart;
+  } catch (_) {
+    return false;
+  }
+}
+
 double _readAxisValue(JSObject data, String key) {
   final value = data.getProperty<JSNumber?>(key.toJS);
   return value?.toDartDouble ?? 0.0;
@@ -46,21 +60,26 @@ double _readAxisValue(JSObject data, String key) {
 
 void startWebTiltDetection(Function correctCallback, Function passCallback) {
   try {
+    _correctCallbackRef = (correctCallback as void Function()).toJS;
+    _passCallbackRef = (passCallback as void Function()).toJS;
     _startTiltDetection(
-      (correctCallback as void Function()).toJS,
-      (passCallback as void Function()).toJS,
+      _correctCallbackRef!,
+      _passCallbackRef!,
     );
-    debugPrint('✅ Web tilt detection started with allowInterop');
+    debugPrint('Web tilt detection started');
   } catch (e) {
-    debugPrint('⚠️ Failed to start web tilt detection: $e');
+    debugPrint('Failed to start web tilt detection: $e');
   }
 }
 
 void stopWebTiltDetection() {
   try {
     _stopTiltDetection();
-    debugPrint('✅ Web tilt detection stopped');
+    debugPrint('Web tilt detection stopped');
   } catch (e) {
-    debugPrint('⚠️ Failed to stop web tilt detection: $e');
+    debugPrint('Failed to stop web tilt detection: $e');
+  } finally {
+    _correctCallbackRef = null;
+    _passCallbackRef = null;
   }
 }

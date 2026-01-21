@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,174 @@ const Color _categoryBorder = Color(0x14FFFFFF);
 const double _categoryCardRadius = 24;
 
 enum StirnratenGameState { setup, countdown, playing, result }
+enum GameMode { classic, suddenDeath, hardcore, drinking }
+
+const int _hardcoreSkipPenaltySeconds = 5;
+const int _drinkingSkipSips = 2;
+const int _drinkingWrongSips = 1;
+
+String _gameModeLabel(GameMode mode) {
+  switch (mode) {
+    case GameMode.classic:
+      return 'Klassisch';
+    case GameMode.suddenDeath:
+      return 'Sudden Death';
+    case GameMode.hardcore:
+      return 'Hardcore';
+    case GameMode.drinking:
+      return 'Trinkspiel';
+  }
+}
+
+Color _gameModeAccent(GameMode mode) {
+  switch (mode) {
+    case GameMode.classic:
+      return _categoryPrimary;
+    case GameMode.suddenDeath:
+      return const Color(0xFFEF4444);
+    case GameMode.hardcore:
+      return const Color(0xFFF59E0B);
+    case GameMode.drinking:
+      return const Color(0xFF4ADE80);
+  }
+}
+
+const double _tiltNeutralZoneDeg = 10;
+const double _tiltTriggerDeg = 25;
+const int _tiltHoldMs = 200;
+const int _tiltCooldownMs = 900;
+const int _tiltCalibrationMs = 1000;
+
+enum _TiltPhase { idle, calibrating, activeWord, triggered, cooldown }
+enum _TiltAction { correct, pass }
+enum _GameAction { correct, skip }
+
+class _TiltDetector {
+  _TiltDetector({
+    required this.neutralZoneDeg,
+    required this.triggerDeg,
+    required this.holdMs,
+    required this.cooldownMs,
+    required this.calibrationMs,
+  });
+
+  final double neutralZoneDeg;
+  final double triggerDeg;
+  final int holdMs;
+  final int cooldownMs;
+  final int calibrationMs;
+
+  _TiltPhase _phase = _TiltPhase.idle;
+  bool _requiresNeutral = true;
+  double _baselinePitch = 0.0;
+  int _calibrationStartMs = 0;
+  final List<double> _calibrationSamples = <double>[];
+  int? _forwardHoldStartMs;
+  int? _backwardHoldStartMs;
+  int _cooldownUntilMs = 0;
+
+  _TiltPhase get phase => _phase;
+  bool get isCalibrating => _phase == _TiltPhase.calibrating;
+  double get baselinePitch => _baselinePitch;
+
+  void start(int nowMs) {
+    _phase = _TiltPhase.calibrating;
+    _requiresNeutral = true;
+    _baselinePitch = 0.0;
+    _calibrationStartMs = nowMs;
+    _calibrationSamples.clear();
+    _forwardHoldStartMs = null;
+    _backwardHoldStartMs = null;
+    _cooldownUntilMs = 0;
+  }
+
+  void stop() {
+    _phase = _TiltPhase.idle;
+    _requiresNeutral = true;
+    _baselinePitch = 0.0;
+    _calibrationSamples.clear();
+    _forwardHoldStartMs = null;
+    _backwardHoldStartMs = null;
+    _cooldownUntilMs = 0;
+  }
+
+  _TiltAction? update(
+    double pitchDeg,
+    int nowMs, {
+    required bool allowTrigger,
+  }) {
+    if (_phase == _TiltPhase.idle) {
+      return null;
+    }
+
+    if (_phase == _TiltPhase.calibrating) {
+      _calibrationSamples.add(pitchDeg);
+      if (nowMs - _calibrationStartMs >= calibrationMs) {
+        _finishCalibration();
+      }
+      return null;
+    }
+
+    if (_phase == _TiltPhase.triggered && nowMs < _cooldownUntilMs) {
+      _phase = _TiltPhase.cooldown;
+    }
+
+    if (nowMs < _cooldownUntilMs) {
+      return null;
+    }
+
+    final delta = pitchDeg - _baselinePitch;
+
+    if (delta.abs() <= neutralZoneDeg) {
+      _requiresNeutral = false;
+      _forwardHoldStartMs = null;
+      _backwardHoldStartMs = null;
+      if (_phase == _TiltPhase.cooldown || _phase == _TiltPhase.triggered) {
+        _phase = _TiltPhase.activeWord;
+      }
+      return null;
+    }
+
+    if (_requiresNeutral) {
+      return null;
+    }
+
+    if (delta >= triggerDeg) {
+      _forwardHoldStartMs ??= nowMs;
+      if (nowMs - (_forwardHoldStartMs ?? nowMs) >= holdMs) {
+        return _registerAction(_TiltAction.correct, nowMs, allowTrigger);
+      }
+    } else if (delta <= -triggerDeg) {
+      _backwardHoldStartMs ??= nowMs;
+      if (nowMs - (_backwardHoldStartMs ?? nowMs) >= holdMs) {
+        return _registerAction(_TiltAction.pass, nowMs, allowTrigger);
+      }
+    } else {
+      _forwardHoldStartMs = null;
+      _backwardHoldStartMs = null;
+    }
+
+    return null;
+  }
+
+  void _finishCalibration() {
+    if (_calibrationSamples.isNotEmpty) {
+      final sum = _calibrationSamples.reduce((value, element) => value + element);
+      _baselinePitch = sum / _calibrationSamples.length;
+    }
+    _phase = _TiltPhase.activeWord;
+    _requiresNeutral = true;
+  }
+
+  _TiltAction? _registerAction(_TiltAction action, int nowMs, bool allowTrigger) {
+    _phase = _TiltPhase.triggered;
+    _cooldownUntilMs = nowMs + cooldownMs;
+    _requiresNeutral = true;
+    _forwardHoldStartMs = null;
+    _backwardHoldStartMs = null;
+    return allowTrigger ? action : null;
+  }
+}
 
 class StirnratenScreen extends StatefulWidget {
   const StirnratenScreen({super.key});
@@ -36,28 +205,44 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   List<String> _currentWords = [];
   List<Map<String, dynamic>> _results = []; // {word: String, correct: bool}
   int _score = 0;
-  int _selectedTime = 150;
-  int _timeLeft = 150;
+  int _selectedTime = 90;
+  int _timeLeft = 90;
+  GameMode _selectedGameMode = GameMode.classic;
+  GameMode _activeGameMode = GameMode.classic;
+  bool _showSettingsPanel = false;
   int _countdown = 3;
   Timer? _gameTimer;
   Timer? _countdownTimer;
   String _currentWord = "";
-  bool _initialCooldownActive = false;
   
   // Sensor handling
+  final _tiltDetector = _TiltDetector(
+    neutralZoneDeg: _tiltNeutralZoneDeg,
+    triggerDeg: _tiltTriggerDeg,
+    holdMs: _tiltHoldMs,
+    cooldownMs: _tiltCooldownMs,
+    calibrationMs: _tiltCalibrationMs,
+  );
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   bool _canSkip = true;
-  bool _neutralPosition = true;
   DateTime _lastSensorProcessing = DateTime.now();
   static const Duration _sensorThrottle = Duration(milliseconds: 50);
+  bool _sensorPermissionGranted = true;
+  bool _showFallbackButtons = false;
+  bool _receivedSensorEvent = false;
+  Timer? _sensorAvailabilityTimer;
+  double _lastPitchDeg = 0.0;
   
   // Feedback
   Color? _feedbackColor;
+  String? _feedbackMessage;
   Timer? _feedbackTimer;
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   String _searchQuery = '';
-  late final List<_CategoryCardData> _categoryItems;
+  List<_CategoryCardData> _categoryItems = [];
+  List<CustomCategory> _customCategories = [];
+  final Set<String> _selectedCustomCategoryIds = <String>{};
 
   @override
   void initState() {
@@ -70,6 +255,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         }
       });
     _categoryItems = _buildCategoryItems();
+    _loadCustomCategories();
   }
 
   @override
@@ -79,6 +265,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _feedbackTimer?.cancel();
     _accelerometerSubscription?.cancel();
     _accelerometerSubscription = null;
+    _sensorAvailabilityTimer?.cancel();
+    _tiltDetector.stop();
     
     if (kIsWeb) {
       stopWebTiltDetection();
@@ -345,7 +533,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     context.read<SoundService>().unlock();
 
     // Request sensor permission (Web/iOS)
-    await requestSensorPermission();
+    _sensorPermissionGranted = await requestSensorPermission();
 
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
@@ -353,8 +541,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       DeviceOrientation.landscapeRight,
     ]);
 
+    final preparedWords = _prepareWordsForMode(words);
     setState(() {
-      _currentWords = List.from(words)..shuffle();
+      _showSettingsPanel = false;
+      _activeGameMode = _selectedGameMode;
+      _currentWords = List.from(preparedWords)..shuffle();
       _score = 0;
       _timeLeft = _selectedTime;
       _results = [];
@@ -372,6 +563,20 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     });
   }
 
+  List<String> _prepareWordsForMode(List<String> words) {
+    if (_selectedGameMode != GameMode.hardcore) {
+      return words;
+    }
+    final hardWords = words.where((word) {
+      final trimmed = word.trim();
+      return trimmed.length >= 8 || trimmed.contains(' ') || trimmed.contains('-');
+    }).toList();
+    if (hardWords.length >= 10) {
+      return hardWords;
+    }
+    return words;
+  }
+
   void _startGame() {
     if (kDebugMode) {
       debugPrint('🎮 Stirnraten: Game starting...');
@@ -379,28 +584,27 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     
     setState(() {
       _gameState = StirnratenGameState.playing;
-      _initialCooldownActive = true;
-      _neutralPosition = true;
       _feedbackColor = null; // Reset any lingering feedback
+      _showFallbackButtons = !_sensorPermissionGranted;
     });
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (kIsWeb) {
+      _tiltDetector.stop();
+    } else {
+      _tiltDetector.start(nowMs);
+    }
+    _receivedSensorEvent = false;
+    _sensorAvailabilityTimer?.cancel();
+    _sensorAvailabilityTimer = Timer(
+      const Duration(milliseconds: 1200),
+      _checkSensorAvailability,
+    );
 
     context.read<SoundService>().playStart();
     _nextWord();
     _startTimer();
     _startSensors();
 
-    // Start initial cooldown to prevent accidental skipping on start
-    Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _initialCooldownActive = false;
-        });
-        if (kDebugMode) {
-          debugPrint('🎮 Stirnraten: Initial cooldown finished');
-        }
-      }
-    });
-    
     if (kDebugMode) {
       debugPrint('✅ Stirnraten: Game started successfully');
     }
@@ -437,11 +641,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         debugPrint('🌐 Using JavaScript tilt detection for Web');
       }
       startWebTiltDetection(() {
-        if (_gameState == StirnratenGameState.playing && _canSkip && !_initialCooldownActive) {
+        if (_gameState == StirnratenGameState.playing && _canSkip) {
           _handleCorrect();
         }
       }, () {
-        if (_gameState == StirnratenGameState.playing && _canSkip && !_initialCooldownActive) {
+        if (_gameState == StirnratenGameState.playing && _canSkip) {
           _handlePass();
         }
       });
@@ -469,57 +673,57 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _processSensorData(double x, double y, double z) {
-    if (_gameState != StirnratenGameState.playing || !_canSkip || _initialCooldownActive) return;
+    if (_gameState != StirnratenGameState.playing) return;
+    _receivedSensorEvent = true;
 
     // Throttle: Process sensor data max every 50ms
     final now = DateTime.now();
     if (now.difference(_lastSensorProcessing) < _sensorThrottle) return;
     _lastSensorProcessing = now;
 
-    // Adaptive Thresholds: Mobile-Geräte haben oft andere Sensitivität
-    const bool isMobile = !kIsWeb;
-    
-    // Mobile: Etwas höhere Thresholds für stabilere Erkennung
-    // Web: Niedrigere Thresholds (wie vorher)
-    const double tiltThreshold = isMobile ? 7.0 : 5.0;
-    const double neutralThreshold = isMobile ? 5.0 : 3.0;
+    final pitch = _computePitchDegrees(x, y, z);
+    _lastPitchDeg = pitch;
 
-    // Web verwendet X-Achse im Landscape, Mobile verwendet Y-Achse
-    // Web: accelerationIncludingGravity hat andere Vorzeichen
-    final double tiltValue = kIsWeb ? -x : y;
+    final action = _tiltDetector.update(
+      pitch,
+      now.millisecondsSinceEpoch,
+      allowTrigger: _canSkip,
+    );
 
-    // Debug-Logging (nur alle 500ms um nicht zu spammen)
     if (kDebugMode && now.millisecondsSinceEpoch % 500 < 50) {
-      const platform = isMobile ? '📱' : '🌐';
-      debugPrint('$platform Sensor: x=${x.toStringAsFixed(1)}, y=${y.toStringAsFixed(1)}, z=${z.toStringAsFixed(1)} | tiltValue=${tiltValue.toStringAsFixed(1)} | Neutral: $_neutralPosition');
+      debugPrint(
+        'Pitch: ${pitch.toStringAsFixed(1)} deg '
+        'Baseline: ${_tiltDetector.baselinePitch.toStringAsFixed(1)} deg '
+        'Phase: ${_tiltDetector.phase}',
+      );
     }
 
-    // Neutral Position erkennen
-    if (tiltValue.abs() < neutralThreshold) {
-      if (!_neutralPosition && kDebugMode) {
-        debugPrint('✅ Neutral position restored');
-      }
-      _neutralPosition = true;
-      return;
-    }
-
-    if (!_neutralPosition) return;
-
-    // Kippen nach vorne (tiltValue > threshold) = Richtig
-    if (tiltValue > tiltThreshold) {
-      if (kDebugMode) {
-        debugPrint('🟢 CORRECT detected! tiltValue=${tiltValue.toStringAsFixed(1)}');
-      }
-      _neutralPosition = false;
+    if (action == _TiltAction.correct) {
       _handleCorrect();
-    }
-    // Kippen nach hinten (tiltValue < -threshold) = Überspringen
-    else if (tiltValue < -tiltThreshold) {
-      if (kDebugMode) {
-        debugPrint('🔴 PASS detected! tiltValue=${tiltValue.toStringAsFixed(1)}');
-      }
-      _neutralPosition = false;
+    } else if (action == _TiltAction.pass) {
       _handlePass();
+    }
+  }
+
+  double _computePitchDegrees(double x, double y, double z) {
+    final norm = math.sqrt(x * x + y * y + z * z);
+    if (norm == 0) return 0.0;
+    final ny = y / norm;
+    final nz = z / norm;
+    var pitch = math.atan2(ny, nz) * 180 / math.pi;
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      pitch = -pitch;
+    }
+    return pitch;
+  }
+
+  void _checkSensorAvailability() {
+    if (!mounted || _gameState != StirnratenGameState.playing) return;
+    if (_receivedSensorEvent) return;
+    final webAvailable = kIsWeb ? getWebSensorAvailable() : _receivedSensorEvent;
+    final sensorAvailable = _sensorPermissionGranted && webAvailable;
+    if (!sensorAvailable && !_showFallbackButtons) {
+      setState(() => _showFallbackButtons = true);
     }
   }
 
@@ -534,85 +738,200 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   void _handleCorrect() {
-    if (!_canSkip || _initialCooldownActive) return;
+    _handleGameAction(_GameAction.correct);
+  }
+
+  void _handlePass() {
+    _handleGameAction(_GameAction.skip);
+  }
+
+  void _handleGameAction(_GameAction action) {
+    if (_gameState != StirnratenGameState.playing || !_canSkip) return;
+    if (_tiltDetector.isCalibrating && !_showFallbackButtons) return;
     _canSkip = false;
-    
-    if (kDebugMode) {
-      debugPrint('✅ CORRECT action triggered');
+
+    switch (_activeGameMode) {
+      case GameMode.classic:
+        if (action == _GameAction.correct) {
+          _applyCorrectAction();
+        } else {
+          _applyClassicSkip();
+        }
+        break;
+      case GameMode.suddenDeath:
+        if (action == _GameAction.correct) {
+          _applyCorrectAction();
+        } else {
+          _applySuddenDeathSkip();
+        }
+        break;
+      case GameMode.hardcore:
+        if (action == _GameAction.correct) {
+          _applyCorrectAction();
+        } else {
+          _applyHardcoreSkip();
+        }
+        break;
+      case GameMode.drinking:
+        if (action == _GameAction.correct) {
+          _applyCorrectAction();
+        } else {
+          _applyDrinkingSkip();
+        }
+        break;
     }
-    
+  }
+
+  void _applyCorrectAction() {
+    if (kDebugMode) {
+      debugPrint('Correct action triggered');
+    }
+
     setState(() {
       _score++;
       _results.add({'word': _currentWord, 'correct': true});
     });
 
-    // Haptic + Sound + Feedback in perfekter Synchronisation
     HapticFeedback.heavyImpact();
-    
-    // Sound-Aufruf non-blocking für bessere Performance
     context.read<SoundService>().playCorrect().then((_) {
       if (kDebugMode) {
-        debugPrint('🔊 Correct sound played');
+        debugPrint('Correct sound played');
       }
     }).catchError((e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Sound error: $e');
+        debugPrint('Sound error: $e');
       }
     });
-    
+
     _showFeedback(
-      const Color(0xDD10B981), // Grün mit höherer Deckkraft für bessere Sichtbarkeit
+      const Color(0xDD10B981),
       onFinished: () {
         _nextWord();
         _canSkip = true;
-        if (kDebugMode) {
-          debugPrint('🔄 Ready for next word');
-        }
       },
     );
   }
 
-  void _handlePass() {
-    if (!_canSkip || _initialCooldownActive) return;
-    _canSkip = false;
-    
+  void _applyClassicSkip() {
     if (kDebugMode) {
-      debugPrint('➡️ PASS action triggered');
+      debugPrint('Skip action triggered');
     }
-    
+
     setState(() {
       _results.add({'word': _currentWord, 'correct': false});
     });
 
-    // Sound für 'Pass' bewusst softer (kein Haptic Feedback)
     context.read<SoundService>().playWrong().then((_) {
       if (kDebugMode) {
-        debugPrint('🔊 Wrong sound played');
+        debugPrint('Wrong sound played');
       }
     }).catchError((e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Sound error: $e');
+        debugPrint('Sound error: $e');
       }
     });
-    
+
     _showFeedback(
-      const Color(0xCCEF4444), // Rot mit etwas geringerer Deckkraft (softer)
+      const Color(0xCCEF4444),
       onFinished: () {
         _nextWord();
         _canSkip = true;
-        if (kDebugMode) {
-          print('🔄 Ready for next word');
+      },
+    );
+  }
+
+  void _applySuddenDeathSkip() {
+    if (kDebugMode) {
+      debugPrint('Sudden Death fail');
+    }
+
+    setState(() {
+      _results.add({'word': _currentWord, 'correct': false});
+    });
+
+    HapticFeedback.mediumImpact();
+    context.read<SoundService>().playWrong();
+
+    _showFeedback(
+      const Color(0xCCEF4444),
+      label: 'Game Over',
+      durationMs: 650,
+      onFinished: _endGame,
+    );
+  }
+
+  void _applyHardcoreSkip() {
+    if (kDebugMode) {
+      debugPrint('Hardcore skip penalty');
+    }
+
+    final nextTime = _timeLeft - _hardcoreSkipPenaltySeconds;
+    final updatedTime = nextTime < 0 ? 0 : nextTime;
+
+    setState(() {
+      _results.add({'word': _currentWord, 'correct': false});
+      _timeLeft = updatedTime;
+    });
+
+    HapticFeedback.mediumImpact();
+    context.read<SoundService>().playWrong();
+
+    final outOfTime = updatedTime == 0;
+    _showFeedback(
+      const Color(0xCCF59E0B),
+      label: '-${_hardcoreSkipPenaltySeconds}s',
+      durationMs: 450,
+      onFinished: () {
+        if (outOfTime) {
+          _endGame();
+        } else {
+          _nextWord();
+          _canSkip = true;
         }
       },
     );
   }
+
+  void _applyDrinkingSkip() {
+    if (kDebugMode) {
+      debugPrint('Drinking mode skip');
+    }
+
+    setState(() {
+      _results.add({'word': _currentWord, 'correct': false});
+    });
+
+    HapticFeedback.lightImpact();
+    context.read<SoundService>().playWrong();
+
+    _showFeedback(
+      const Color(0xCCF59E0B),
+      label: 'Trink ${_drinkingSkipSips} Schluck',
+      durationMs: 550,
+      onFinished: () {
+        _nextWord();
+        _canSkip = true;
+      },
+    );
+  }
   
-  void _showFeedback(Color color, {VoidCallback? onFinished}) {
-    setState(() => _feedbackColor = color);
+  void _showFeedback(
+    Color color, {
+    String? label,
+    int durationMs = 400,
+    VoidCallback? onFinished,
+  }) {
+    setState(() {
+      _feedbackColor = color;
+      _feedbackMessage = label;
+    });
     _feedbackTimer?.cancel();
-    _feedbackTimer = Timer(const Duration(milliseconds: 400), () {
+    _feedbackTimer = Timer(Duration(milliseconds: durationMs), () {
       if (mounted) {
-        setState(() => _feedbackColor = null);
+        setState(() {
+          _feedbackColor = null;
+          _feedbackMessage = null;
+        });
         onFinished?.call();
       }
     });
@@ -621,6 +940,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   void _endGame() {
     _gameTimer?.cancel();
     _accelerometerSubscription?.cancel();
+    _sensorAvailabilityTimer?.cancel();
+    _tiltDetector.stop();
     
     if (kIsWeb) {
       stopWebTiltDetection();
@@ -737,6 +1058,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     final filteredCategories = _filteredCategories;
     final selectedCount = _selectedCategories.length;
     const bottomBarHeight = 104.0;
+    final topInset = MediaQuery.of(context).padding.top;
 
     return DefaultTextStyle(
       style: GoogleFonts.spaceGrotesk(
@@ -758,7 +1080,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                       focusNode: _searchFocusNode,
                       isFocused: _searchFocusNode.hasFocus,
                       onBack: () => Navigator.pop(context),
-                      onSettings: _showTimeSelectionDialog,
+                      onSettings: _toggleSettingsPanel,
                       onQueryChanged: (value) {
                         setState(() {
                           _searchQuery = value;
@@ -804,9 +1126,52 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             selectedCount: selectedCount,
             onPressed: selectedCount == 0 ? null : _startSelectedCategories,
           ),
+          if (_showSettingsPanel)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _closeSettingsPanel,
+                behavior: HitTestBehavior.translucent,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          if (_showSettingsPanel)
+            Positioned(
+              top: topInset + 88,
+              right: 20,
+              child: _SettingsPanel(
+                selectedTime: _selectedTime,
+                selectedMode: _selectedGameMode,
+                onTimeChanged: (value) {
+                  setState(() => _selectedTime = value);
+                },
+                onModeChanged: (mode) {
+                  setState(() => _selectedGameMode = mode);
+                },
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _loadCustomCategories() async {
+    final categories = await _categoryService.getCustomCategories();
+    if (!mounted) return;
+    setState(() {
+      _customCategories = categories;
+      _categoryItems = _buildCategoryItems();
+      _selectedCustomCategoryIds
+          .removeWhere((id) => !_customCategories.any((cat) => cat.name == id));
+    });
+  }
+
+  void _toggleSettingsPanel() {
+    setState(() => _showSettingsPanel = !_showSettingsPanel);
+  }
+
+  void _closeSettingsPanel() {
+    if (!_showSettingsPanel) return;
+    setState(() => _showSettingsPanel = false);
   }
 
   // ignore: unused_element
@@ -901,29 +1266,30 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           ),
         ),
         
-        // Touch controls - Links überspringen, Rechts richtig
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: _handlePass,
-                behavior: HitTestBehavior.translucent,
-                child: Container(
-                  color: Colors.transparent,
+        if (!_showFallbackButtons)
+          // Touch controls - Links überspringen, Rechts richtig
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: _handlePass,
+                  behavior: HitTestBehavior.translucent,
+                  child: Container(
+                    color: Colors.transparent,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: _handleCorrect,
-                behavior: HitTestBehavior.translucent,
-                child: Container(
-                  color: Colors.transparent,
+              Expanded(
+                child: GestureDetector(
+                  onTap: _handleCorrect,
+                  behavior: HitTestBehavior.translucent,
+                  child: Container(
+                    color: Colors.transparent,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
 
         Center(
           child: Padding(
@@ -973,14 +1339,46 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           ),
         ),
 
-        const Positioned(
+        Positioned(
+          top: 40,
+          left: 28,
+          child: _ModeBadge(mode: _activeGameMode),
+        ),
+
+        if (_showFallbackButtons)
+          Positioned(
+            bottom: 96,
+            left: 24,
+            right: 24,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _FallbackActionButton(
+                    label: 'Passen',
+                    color: const Color(0xFFF59E0B),
+                    onTap: _handlePass,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _FallbackActionButton(
+                    label: 'Richtig',
+                    color: const Color(0xFF10B981),
+                    onTap: _handleCorrect,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        Positioned(
           bottom: 40,
           left: 0,
           right: 0,
           child: Text(
-            'Tippen oder kippen',
+            _showFallbackButtons ? 'Tippen zum Antworten' : 'Kippen zum Antworten',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Color(0x80FFFFFF),
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -988,6 +1386,28 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ),
           ),
         ),
+
+        if (kDebugMode && !kIsWeb)
+          Positioned(
+            left: 16,
+            bottom: _showFallbackButtons ? 160 : 80,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'pitch ${_lastPitchDeg.toStringAsFixed(1)} deg\\n'
+                'state ${_tiltDetector.phase}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
 
         // Feedback Overlay - MUSS ZULETZT IM STACK SEIN für höchste Z-Order
         if (_feedbackColor != null)
@@ -998,6 +1418,20 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 duration: const Duration(milliseconds: 150),
                 child: Container(
                   color: _feedbackColor!,
+                  child: _feedbackMessage == null
+                      ? null
+                      : Center(
+                          child: Text(
+                            _feedbackMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ),
@@ -1598,6 +2032,297 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeBadge extends StatelessWidget {
+  final GameMode mode;
+
+  const _ModeBadge({required this.mode});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _gameModeAccent(mode);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _categoryGlass,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.45),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.22),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _gameModeLabel(mode),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FallbackActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _FallbackActionButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withValues(alpha: 0.18),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: color.withValues(alpha: 0.7)),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentedOption<T> {
+  final T value;
+  final String label;
+
+  const _SegmentedOption({required this.value, required this.label});
+}
+
+class _SegmentedControl<T> extends StatelessWidget {
+  final List<_SegmentedOption<T>> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+
+  const _SegmentedControl({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: options.map((option) {
+        final selected = option.value == value;
+        final backgroundColor = selected
+            ? _categoryPrimary
+            : _categorySurface.withValues(alpha: 0.65);
+        final textColor = selected
+            ? _categoryBackground
+            : Colors.white.withValues(alpha: 0.8);
+
+        return GestureDetector(
+          onTap: () => onChanged(option.value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected
+                    ? _categoryPrimary
+                    : Colors.white.withValues(alpha: 0.12),
+              ),
+            ),
+            child: Text(
+              option.label,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _SettingsPanel extends StatelessWidget {
+  final int selectedTime;
+  final ValueChanged<int> onTimeChanged;
+  final GameMode selectedMode;
+  final ValueChanged<GameMode> onModeChanged;
+
+  const _SettingsPanel({
+    required this.selectedTime,
+    required this.onTimeChanged,
+    required this.selectedMode,
+    required this.onModeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const timeOptions = [
+      _SegmentedOption<int>(value: 30, label: '30s'),
+      _SegmentedOption<int>(value: 60, label: '60s'),
+      _SegmentedOption<int>(value: 90, label: '90s'),
+      _SegmentedOption<int>(value: 120, label: '120s'),
+    ];
+
+    final modeOptions = [
+      _SegmentedOption<GameMode>(value: GameMode.classic, label: 'Klassisch'),
+      _SegmentedOption<GameMode>(value: GameMode.suddenDeath, label: 'Sudden'),
+      _SegmentedOption<GameMode>(value: GameMode.hardcore, label: 'Hardcore'),
+      _SegmentedOption<GameMode>(value: GameMode.drinking, label: 'Trinkspiel'),
+    ];
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_categoryCardRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _categoryGlass,
+              borderRadius: BorderRadius.circular(_categoryCardRadius),
+              border: Border.all(color: _categoryBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Spielzeit',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    color: Colors.white70,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SegmentedControl<int>(
+                  options: timeOptions,
+                  value: selectedTime,
+                  onChanged: onTimeChanged,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Modus',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    color: Colors.white70,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SegmentedControl<GameMode>(
+                  options: modeOptions,
+                  value: selectedMode,
+                  onChanged: onModeChanged,
+                ),
+                if (selectedMode == GameMode.drinking) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Optionaler Party-Modus. Bitte verantwortungsvoll.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _SettingsChip(label: 'Skip = $_drinkingSkipSips Schluck'),
+                      _SettingsChip(label: 'Fehler = $_drinkingWrongSips Schluck'),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsChip extends StatelessWidget {
+  final String label;
+
+  const _SettingsChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _categorySurface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.75),
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );

@@ -8,6 +8,13 @@ import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
 import 'stirnraten_screen.dart';
 
+const Color _homePrimary = Color(0xFFF9F506);
+const Color _homeBackground = Color(0xFF1A1A0F);
+const Color _homeSurface = Color(0xFF23220F);
+const Color _homeGlass = Color(0x6623220F);
+const Color _homeBorder = Color(0x14FFFFFF);
+const double _homeCardRadius = 24;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -121,8 +128,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   constraints.maxHeight - (verticalPadding * 2),
                 );
                 final heroHeight = min(
-                  440.0,
-                  max(320.0, constraints.maxHeight * 0.52),
+                  360.0,
+                  max(260.0, constraints.maxHeight * 0.42),
                 );
 
                 return Center(
@@ -153,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     opacity: _heroFade,
                                     child: SizedBox(
                                       height: heroHeight,
-                                      child: _HeroCard(pulse: _pulse),
+                                      child: _StartCard(pulse: _pulse),
                                     ),
                                   ),
                                 ),
@@ -217,10 +224,10 @@ class _TopBar extends StatelessWidget {
             children: [
               Text(
                 'Stirnraten',
-                style: GoogleFonts.oswald(
-                  fontSize: 22,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  letterSpacing: 1.1,
+                  letterSpacing: 0.3,
                   color: Colors.white,
                 ),
               ),
@@ -229,8 +236,8 @@ class _TopBar extends StatelessWidget {
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 0.6,
-                  color: Colors.white.withValues(alpha: 0.55),
+                  letterSpacing: 0.3,
+                  color: Colors.white.withValues(alpha: 0.6),
                 ),
               ),
             ],
@@ -250,13 +257,13 @@ class _TopIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: _homeGlass,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: Colors.white.withValues(alpha: 0.12),
         ),
       ),
       child: Icon(
@@ -268,165 +275,73 @@ class _TopIcon extends StatelessWidget {
   }
 }
 
-class _HeroCard extends StatefulWidget {
+class _StartCard extends StatefulWidget {
   final Animation<double> pulse;
 
-  const _HeroCard({required this.pulse});
+  const _StartCard({required this.pulse});
 
   @override
-  State<_HeroCard> createState() => _HeroCardState();
+  State<_StartCard> createState() => _StartCardState();
 }
 
-class _HeroCardState extends State<_HeroCard> {
+class _StartCardState extends State<_StartCard> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final outerRadius = BorderRadius.circular(28);
-    final innerRadius = BorderRadius.circular(26);
+    final scale = _hovered ? 1.02 : 1.0;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedScale(
-        scale: _hovered ? 1.02 : 1.0,
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.easeOutCubic,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: outerRadius,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.6),
-                blurRadius: 36,
-                offset: const Offset(0, 18),
+        scale: scale,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(_homeCardRadius),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+              decoration: BoxDecoration(
+                color: _homeGlass,
+                borderRadius: BorderRadius.circular(_homeCardRadius),
+                border: Border.all(color: _homeBorder),
+                boxShadow: _hovered
+                    ? [
+                        BoxShadow(
+                          color: _homePrimary.withValues(alpha: 0.18),
+                          blurRadius: 26,
+                          offset: const Offset(0, 12),
+                        ),
+                      ]
+                    : null,
               ),
-              BoxShadow(
-                color: const Color(0xFFF97316).withValues(alpha: 0.18),
-                blurRadius: 60,
-                offset: const Offset(0, 24),
-              ),
-            ],
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(1.6),
-            decoration: BoxDecoration(
-              borderRadius: outerRadius,
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFFFB347),
-                  Color(0xFF38BDF8),
-                  Color(0xFFFB7185),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: innerRadius,
-              child: Stack(
-                fit: StackFit.expand,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.asset(
-                    'assets/images/stirnraten_image.png',
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                  ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            const Color(0xFF0B0E16).withValues(alpha: 0.18),
-                            const Color(0xFF0B0E16).withValues(alpha: 0.85),
-                          ],
-                          stops: const [0.0, 0.6, 1.0],
-                        ),
-                      ),
+                  _ModePill(pulse: widget.pulse),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Setz das Handy\nan die Stirn.',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      letterSpacing: 0.2,
+                      color: Colors.white,
                     ),
                   ),
-                  Positioned(
-                    top: -70,
-                    right: -40,
-                    child: Container(
-                      width: 220,
-                      height: 220,
-                      decoration: BoxDecoration(
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFFFFB347).withValues(alpha: 0.35),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: 110,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: innerRadius.bottomLeft,
-                        bottomRight: innerRadius.bottomRight,
-                      ),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.0),
-                                Colors.black.withValues(alpha: 0.35),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        _ModePill(pulse: widget.pulse),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Setz das Handy\nan die Stirn.',
-                          style: GoogleFonts.oswald(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w600,
-                            height: 1.05,
-                            letterSpacing: 0.4,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.35),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Das Team erklärt. Du rätst.',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.4,
-                            color: Colors.white.withValues(alpha: 0.68),
-                          ),
-                        ),
-                      ],
+                  const SizedBox(height: 12),
+                  Text(
+                    'Das Team erkl\u00e4rt. Du r\u00e4tst.',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                      color: Colors.white.withValues(alpha: 0.65),
                     ),
                   ),
                 ],
@@ -449,9 +364,9 @@ class _ModePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: _homeSurface.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -478,8 +393,8 @@ class _ModePill extends StatelessWidget {
             style: GoogleFonts.spaceGrotesk(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.6,
+              color: Colors.white.withValues(alpha: 0.85),
             ),
           ),
         ],
@@ -498,7 +413,6 @@ class _StartButton extends StatefulWidget {
 }
 
 class _StartButtonState extends State<_StartButton> {
-  bool _hovered = false;
   bool _pressed = false;
 
   void _setPressed(bool value) {
@@ -509,95 +423,50 @@ class _StartButtonState extends State<_StartButton> {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(999);
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _pressed ? 0.97 : 1.0,
-          duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOut,
-          child: Container(
-            height: 66,
-            decoration: BoxDecoration(
-              borderRadius: borderRadius,
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFFF4D6D),
-                  Color(0xFFFFB347),
-                ],
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: widget.onPressed,
+      child: AnimatedScale(
+        scale: _pressed ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: _homePrimary,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: _homePrimary.withValues(alpha: 0.35),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF8A34).withValues(alpha: 0.35),
-                  blurRadius: 28,
-                  offset: const Offset(0, 14),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text(
+                'Runde starten',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                  color: _homeBackground,
                 ),
-              ],
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
               ),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: AnimatedOpacity(
-                    opacity: _hovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 250),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: borderRadius,
-                      ),
-                    ),
-                  ),
+              Positioned(
+                right: 18,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: _homeBackground,
+                  size: 22,
                 ),
-                Stack(
-                  children: [
-                    Center(
-                      child: Text(
-                        'Runde starten',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 18,
-                      top: 0,
-                      bottom: 0,
-                      child: AnimatedSlide(
-                        offset: _hovered ? const Offset(0.08, 0) : Offset.zero,
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOut,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.arrow_forward_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -616,60 +485,46 @@ class _AnimatedBackground extends StatelessWidget {
       animation: controller,
       builder: (context, child) {
         final t = controller.value * pi * 2;
-        final driftX = sin(t) * 18;
-        final driftY = cos(t) * 14;
+        final driftX = sin(t) * 14;
+        final driftY = cos(t) * 12;
 
         return Stack(
           children: [
             Positioned.fill(
               child: Container(
-                decoration: const BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(0.0, -0.9),
-                    radius: 1.3,
-                    colors: [
-                      Color(0xFF1B1F2E),
-                      Color(0xFF0B0E16),
-                    ],
-                    stops: [0.0, 0.65],
-                  ),
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: Container(
                 decoration: BoxDecoration(
+                  color: _homeBackground,
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.transparent,
-                      const Color(0xFF0B0E16).withValues(alpha: 0.6),
+                      _homeBackground,
+                      _homeSurface.withValues(alpha: 0.6),
                     ],
                   ),
                 ),
               ),
             ),
             _GlowOrb(
-              size: 420,
-              color: const Color(0xFFFB7185).withValues(alpha: 0.25),
-              offset: Offset(-120 + driftX, -110 + driftY),
-              alignment: Alignment.topLeft,
-              blurRadius: 110,
-            ),
-            _GlowOrb(
-              size: 380,
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.22),
-              offset: Offset(130 - driftX, 60 + driftY),
+              size: 260,
+              color: _homePrimary.withValues(alpha: 0.16),
+              offset: Offset(80 + driftX, -120 + driftY),
               alignment: Alignment.topRight,
               blurRadius: 120,
             ),
             _GlowOrb(
-              size: 520,
-              color: const Color(0xFFF97316).withValues(alpha: 0.18),
-              offset: Offset(40 + driftY, 170 - driftX),
+              size: 300,
+              color: const Color(0xFF4ADE80).withValues(alpha: 0.16),
+              offset: Offset(-120 + driftX, 160 + driftY),
               alignment: Alignment.bottomLeft,
               blurRadius: 140,
+            ),
+            _GlowOrb(
+              size: 220,
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+              offset: Offset(-80 + driftY, -40 - driftX),
+              alignment: Alignment.topLeft,
+              blurRadius: 120,
             ),
           ],
         );

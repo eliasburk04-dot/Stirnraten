@@ -1,223 +1,363 @@
-// Tilt Detection System for Stirnraten Game
-// This file handles all accelerometer/gyroscope input for the web version
+/*
+ * ============================================================================
+ * TILT-SENSOR IMPLEMENTIERUNG FÜR IPHONE LERNKARTEN-APP
+ * ============================================================================
+ * 
+ * ZWECK:
+ * Diese Klasse implementiert eine Tilt-Steuerung für Lernkarten auf dem iPhone.
+ * Der Benutzer hält das iPhone im QUERFORMAT und kann durch Neigen des Geräts
+ * Aktionen auslösen:
+ * - Nach VORNE neigen → Wort als RICHTIG markieren (Bildschirm GRÜN)
+ * - Nach HINTEN neigen → Wort ÜBERSPRINGEN (Bildschirm ROT)
+ * 
+ * ============================================================================
+ * TECHNISCHE DETAILS:
+ * ============================================================================
+ * 
+ * SENSOR-ACHSEN (DeviceOrientation API):
+ * - Alpha: Kompass-Richtung (0-360°) - NICHT VERWENDET
+ * - Beta:  Rotation um X-Achse (vor/zurück im Hochformat) - Bereich: -180 bis 180°
+ * - Gamma: Rotation um Y-Achse (links/rechts im Hochformat) - Bereich: -90 bis 90°
+ * 
+ * QUERFORMAT-SPEZIFISCH:
+ * Wenn das iPhone im Querformat gehalten wird, ändern sich die Achsen:
+ * - Beta liegt bei ~90° (Gerät liegt flach auf der Seite)
+ * - Gamma wird zur Vor/Zurück-Neigung
+ *   → Positiver Gamma-Wert = nach vorne geneigt (Oberseite des iPhones nach unten)
+ *   → Negativer Gamma-Wert = nach hinten geneigt (Unterseite des iPhones nach unten)
+ * 
+ * ============================================================================
+ * IOS-BERECHTIGUNGEN (WICHTIG!):
+ * ============================================================================
+ * 
+ * Ab iOS 13+ benötigt DeviceOrientation eine explizite Berechtigung:
+ * - DeviceOrientationEvent.requestPermission() muss aufgerufen werden
+ * - MUSS durch eine User-Geste ausgelöst werden (z.B. Button-Klick)
+ * - Funktioniert NUR über HTTPS (Vercel bietet dies automatisch)
+ * 
+ * INTEGRATION IN FLUTTER:
+ * 1. Erstelle einen Button in deiner Flutter-UI
+ * 2. Bei Klick: rufe JavaScript-Funktion auf, die controller.start() ausführt
+ * 3. Verwende Platform-Channels oder JS-Interop für Callbacks
+ * 
+ * ============================================================================
+ * STATE-MACHINE LOGIK:
+ * ============================================================================
+ * 
+ * Der Controller verwendet eine State-Machine mit 3 Zuständen:
+ * 
+ * NEUTRAL → Wartet auf Neigung
+ *   ↓
+ *   Wenn tiltAngle > forwardThreshold (z.B. 25°)
+ *   → Wechsel zu FORWARD → onTiltForward() wird aufgerufen
+ *   
+ *   Wenn tiltAngle < backwardThreshold (z.B. -25°)
+ *   → Wechsel zu BACKWARD → onTiltBackward() wird aufgerufen
+ * 
+ * FORWARD/BACKWARD → Wartet auf Reset
+ *   ↓
+ *   Wenn |tiltAngle| < resetThreshold (z.B. 10°)
+ *   → Zurück zu NEUTRAL → onReset() wird aufgerufen
+ * 
+ * VORTEIL: Verhindert mehrfaches Auslösen der gleichen Aktion.
+ * Der Benutzer muss das Gerät erst zurück in neutrale Position bringen,
+ * bevor die nächste Aktion erkannt wird.
+ * 
+ * ============================================================================
+ * KONFIGURATION DER SCHWELLENWERTE:
+ * ============================================================================
+ * 
+ * forwardThreshold: 25-35° empfohlen
+ *   - Zu niedrig (< 20°): Zu empfindlich, versehentliches Auslösen
+ *   - Zu hoch (> 40°): Unbequem, zu starke Neigung erforderlich
+ * 
+ * backwardThreshold: -25 bis -35° empfohlen
+ *   - Sollte symmetrisch zu forwardThreshold sein
+ * 
+ * resetThreshold: 8-12° empfohlen
+ *   - Sollte deutlich kleiner als forward/backward sein
+ *   - Verhindert "Flattern" zwischen Zuständen
+ * 
+ * ============================================================================
+ * VERWENDUNGSBEISPIEL IN FLUTTER WEB:
+ * ============================================================================
+ * 
+ * // JavaScript-Seite (index.html oder separates .js file):
+ * 
+ * let tiltController;
+ * 
+ * function initTiltController() {
+ *   tiltController = new TiltController({
+ *     forwardThreshold: 30,
+ *     backwardThreshold: -30,
+ *     resetThreshold: 10,
+ *     
+ *     onTiltForward: () => {
+ *       // Sende Event an Flutter
+ *       window.postMessage({ type: 'TILT_FORWARD' }, '*');
+ *       // Optional: Visuelles Feedback
+ *       document.body.style.backgroundColor = '#00FF00';
+ *     },
+ *     
+ *     onTiltBackward: () => {
+ *       window.postMessage({ type: 'TILT_BACKWARD' }, '*');
+ *       document.body.style.backgroundColor = '#FF0000';
+ *     },
+ *     
+ *     onReset: () => {
+ *       window.postMessage({ type: 'TILT_RESET' }, '*');
+ *       document.body.style.backgroundColor = '#FFFFFF';
+ *     }
+ *   });
+ * }
+ * 
+ * async function startTiltSensor() {
+ *   try {
+ *     await tiltController.start();
+ *     console.log('✅ Tilt-Sensor aktiv');
+ *     return true;
+ *   } catch (error) {
+ *     console.error('❌ Fehler beim Start:', error);
+ *     return false;
+ *   }
+ * }
+ * 
+ * // Flutter-Seite (Dart):
+ * 
+ * import 'dart:html' as html;
+ * import 'package:flutter/material.dart';
+ * 
+ * class LernkartenScreen extends StatefulWidget {
+ *   @override
+ *   _LernkartenScreenState createState() => _LernkartenScreenState();
+ * }
+ * 
+ * class _LernkartenScreenState extends State<LernkartenScreen> {
+ *   Color backgroundColor = Colors.white;
+ * 
+ *   @override
+ *   void initState() {
+ *     super.initState();
+ *     
+ *     // Höre auf JavaScript-Messages
+ *     html.window.addEventListener('message', (event) {
+ *       final data = (event as html.MessageEvent).data;
+ *       
+ *       if (data['type'] == 'TILT_FORWARD') {
+ *         setState(() {
+ *           backgroundColor = Colors.green;
+ *           // Hier: Karte als richtig markieren
+ *           markCardAsCorrect();
+ *         });
+ *       } else if (data['type'] == 'TILT_BACKWARD') {
+ *         setState(() {
+ *           backgroundColor = Colors.red;
+ *           // Hier: Karte überspringen
+ *           skipCard();
+ *         });
+ *       } else if (data['type'] == 'TILT_RESET') {
+ *         setState(() {
+ *           backgroundColor = Colors.white;
+ *         });
+ *       }
+ *     });
+ *   }
+ * 
+ *   Future<void> _enableTiltSensor() async {
+ *     // Rufe JavaScript-Funktion auf
+ *     final result = await html.window.callMethod('startTiltSensor');
+ *     
+ *     if (result == true) {
+ *       ScaffoldMessenger.of(context).showSnackBar(
+ *         SnackBar(content: Text('Tilt-Sensor aktiviert!')),
+ *       );
+ *     } else {
+ *       ScaffoldMessenger.of(context).showSnackBar(
+ *         SnackBar(content: Text('Berechtigung verweigert')),
+ *       );
+ *     }
+ *   }
+ * 
+ *   @override
+ *   Widget build(BuildContext context) {
+ *     return Scaffold(
+ *       backgroundColor: backgroundColor,
+ *       body: Center(
+ *         child: Column(
+ *           mainAxisAlignment: MainAxisAlignment.center,
+ *           children: [
+ *             ElevatedButton(
+ *               onPressed: _enableTiltSensor,
+ *               child: Text('Tilt-Steuerung aktivieren'),
+ *             ),
+ *             // Deine Lernkarten-UI hier
+ *           ],
+ *         ),
+ *       ),
+ *     );
+ *   }
+ * }
+ * 
+ * ============================================================================
+ * DEBUGGING TIPPS:
+ * ============================================================================
+ * 
+ * 1. Console-Logs: Die Klasse loggt alle State-Änderungen
+ * 2. Teste im echten iPhone (nicht Simulator!)
+ * 3. Überprüfe HTTPS-Verbindung (erforderlich für DeviceOrientation)
+ * 4. Stelle sicher, dass Berechtigung durch Button-Klick angefordert wird
+ * 5. Teste verschiedene Schwellenwerte für deine Präferenz
+ * 
+ * HÄUFIGE FEHLER:
+ * - "DeviceOrientation not supported": Teste auf echtem iPhone
+ * - Permission denied: Berechtigung muss durch User-Geste erfolgen
+ * - Keine Events: Überprüfe HTTPS und iOS-Version (13+)
+ * - Falsche Richtung: Stelle sicher, dass Querformat erkannt wird
+ * 
+ * ============================================================================
+ */
 
-window.tiltDetection = {
-  isActive: false,
-  neutralPosition: true,
-  lastTilt: 0,
-  cooldownMs: 0,  // No cooldown
-  tiltThreshold: 3.0,  // Low threshold for reliable detection
-  neutralThreshold: 1.5,  // Low neutral threshold
-  correctCallback: null,
-  passCallback: null,
-  debugMode: true,
-  lastX: 0,
-  lastY: 0,
-  lastZ: 0,
-  
-  start: function(correctCallback, passCallback) {
-    this.isActive = true;
-    this.neutralPosition = true;
-    this.correctCallback = correctCallback;
-    this.passCallback = passCallback;
-    this.lastTilt = 0;
-    console.log('🎮 Tilt detection started v4 - callbacks registered:', !!correctCallback, !!passCallback);
-  },
-  
-  stop: function() {
+class TiltController {
+  constructor(options = {}) {
+    this.onTiltForward = options.onTiltForward || (() => {});
+    this.onTiltBackward = options.onTiltBackward || (() => {});
+    this.onReset = options.onReset || (() => {});
+    
+    // Schwellenwerte für Neigung (in Grad)
+    this.forwardThreshold = options.forwardThreshold || 25;
+    this.backwardThreshold = options.backwardThreshold || -25;
+    this.resetThreshold = options.resetThreshold || 10; // Zurück zu neutral
+    
+    this.currentState = 'neutral'; // 'neutral', 'forward', 'backward'
     this.isActive = false;
-    this.correctCallback = null;
-    this.passCallback = null;
-    console.log('🎮 Tilt detection stopped');
-  },
+  }
   
-  processTilt: function(x, y, z) {
+  // Starte die Sensor-Überwachung
+  async start() {
+    if (typeof DeviceOrientationEvent === 'undefined') {
+      throw new Error('DeviceOrientation wird nicht unterstützt');
+    }
+    
+    // iOS 13+ benötigt Berechtigung
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission !== 'granted') {
+          throw new Error('Berechtigung für Bewegungssensor wurde verweigert');
+        }
+      } catch (error) {
+        throw new Error('Fehler bei Berechtigungsanfrage: ' + error.message);
+      }
+    }
+    
+    this.isActive = true;
+    window.addEventListener('deviceorientation', this.handleOrientation.bind(this));
+    console.log('Tilt-Controller gestartet');
+  }
+  
+  // Stoppe die Sensor-Überwachung
+  stop() {
+    this.isActive = false;
+    window.removeEventListener('deviceorientation', this.handleOrientation.bind(this));
+    console.log('Tilt-Controller gestoppt');
+  }
+  
+  // Verarbeite Orientierungsdaten
+  handleOrientation(event) {
     if (!this.isActive) return;
     
-    // Store latest values
-    this.lastX = x;
-    this.lastY = y;
-    this.lastZ = z;
+    // Beta: Rotation um X-Achse (Vor/Zurück-Neigung)
+    // Positiv = nach vorne geneigt, Negativ = nach hinten geneigt
+    const beta = event.beta;
     
-    const now = Date.now();
+    // Gamma: Rotation um Y-Achse (Links/Rechts-Neigung)
+    const gamma = event.gamma;
     
-    // For Stirnraten: Phone is held at forehead in LANDSCAPE mode
-    // The phone's screen faces away from the user
-    // 
-    // When tilting FORWARD (showing word to others): 
-    //   - On Android: Y becomes more positive
-    //   - On iOS: Y becomes more negative (inverted)
-    //
-    // When tilting BACKWARD (hiding word):
-    //   - On Android: Y becomes more negative  
-    //   - On iOS: Y becomes more positive (inverted)
-    //
-    // We use Y-axis primarily as it's most reliable in landscape
+    // Alpha: Kompass-Ausrichtung (wird hier nicht benötigt)
+    // const alpha = event.alpha;
     
-    // Detect if iOS (accelerometer is inverted on iOS)
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (beta === null || gamma === null) return;
     
-    // Use Y-axis for landscape tilt detection
-    // Invert for iOS
-    let tiltValue = isIOS ? -y : y;
+    // Korrektur für Querformat: 
+    // Im Querformat ist die Interpretation anders
+    // Wir nutzen gamma für die Vor/Zurück-Neigung im Querformat
+    let tiltAngle;
     
-    // Alternative: Try using the axis with the largest absolute change
-    // This makes it more robust across different phone orientations
-    const absX = Math.abs(x);
-    const absY = Math.abs(y);
-    
-    // If X has stronger signal than Y, use X (might be in different orientation)
-    if (absX > absY + 2) {
-      tiltValue = isIOS ? -x : x;
+    // Erkenne Querformat anhand von beta
+    if (Math.abs(beta) > 45) {
+      // Querformat (Landscape)
+      // gamma wird zur Vor/Zurück-Neigung
+      tiltAngle = gamma;
+    } else {
+      // Hochformat (Portrait) - sollte nicht verwendet werden
+      tiltAngle = beta;
     }
     
-    // Debug logging (every 200ms to reduce spam but see more)
-    if (this.debugMode && now % 200 < 25) {
-      console.log(`🌐 x=${x.toFixed(1)}, y=${y.toFixed(1)}, z=${z.toFixed(1)} | tilt=${tiltValue.toFixed(1)} | iOS=${isIOS} | neutral=${this.neutralPosition}`);
-    }
-    
-    // Neutral Position detection - must return to neutral before next action
-    if (Math.abs(tiltValue) < this.neutralThreshold) {
-      if (!this.neutralPosition) {
-        console.log('✅ Neutral restored');
+    // State-Machine für saubere Übergänge
+    if (this.currentState === 'neutral') {
+      if (tiltAngle > this.forwardThreshold) {
+        this.currentState = 'forward';
+        this.onTiltForward();
+        console.log('Tilted FORWARD:', tiltAngle);
+      } else if (tiltAngle < this.backwardThreshold) {
+        this.currentState = 'backward';
+        this.onTiltBackward();
+        console.log('Tilted BACKWARD:', tiltAngle);
       }
-      this.neutralPosition = true;
-      return;
-    }
-    
-    // Only trigger if coming from neutral position
-    if (!this.neutralPosition) return;
-    
-    // Forward tilt = CORRECT (show word to others)
-    if (tiltValue > this.tiltThreshold) {
-      console.log('🟢 CORRECT! tilt=' + tiltValue.toFixed(1));
-      this.neutralPosition = false;
-      this.lastTilt = now;
-      this.triggerCorrect();
-    }
-    // Backward tilt = PASS (hide word)
-    else if (tiltValue < -this.tiltThreshold) {
-      console.log('🔴 PASS! tilt=' + tiltValue.toFixed(1));
-      this.neutralPosition = false;
-      this.lastTilt = now;
-      this.triggerPass();
-    }
-  },
-  
-  triggerCorrect: function() {
-    if (this.correctCallback && typeof this.correctCallback === 'function') {
-      try {
-        this.correctCallback();
-      } catch (e) {
-        console.error('❌ Correct callback error:', e);
+    } else {
+      // Zurück zu neutral, wenn Neigung unter Schwellenwert
+      if (Math.abs(tiltAngle) < this.resetThreshold) {
+        this.currentState = 'neutral';
+        this.onReset();
+        console.log('Reset to NEUTRAL:', tiltAngle);
       }
-    }
-  },
-  
-  triggerPass: function() {
-    if (this.passCallback && typeof this.passCallback === 'function') {
-      try {
-        this.passCallback();
-      } catch (e) {
-        console.error('❌ Pass callback error:', e);
-      }
-    }
-  },
-  
-  // Manual trigger functions for testing or touch fallback
-  forceCorrect: function() {
-    if (this.isActive) {
-      console.log('🟢 Force CORRECT triggered');
-      this.triggerCorrect();
-    }
-  },
-  
-  forcePass: function() {
-    if (this.isActive) {
-      console.log('🔴 Force PASS triggered');
-      this.triggerPass();
     }
   }
-};
-
-// Global variable to store latest acceleration including gravity
-window.latestAccelerometerData = { x: 0, y: 0, z: 0 };
-window.sensorInitialized = false;
-window.sensorAvailable = false;
-
-// Initialize device motion listener
-function initDeviceMotion() {
-  if (window.sensorInitialized) {
-    console.log('📱 Sensor already initialized');
-    return;
-  }
   
-  window.addEventListener('devicemotion', (event) => {
-    if (event.accelerationIncludingGravity) {
-      const x = event.accelerationIncludingGravity.x || 0;
-      const y = event.accelerationIncludingGravity.y || 0;
-      const z = event.accelerationIncludingGravity.z || 0;
-      
-      // Mark sensor as available if we get non-zero values
-      if (x !== 0 || y !== 0 || z !== 0) {
-        window.sensorAvailable = true;
-      }
-      
-      window.latestAccelerometerData = { x, y, z };
-      window.tiltDetection.processTilt(x, y, z);
-    }
-  }, true);
-  
-  window.sensorInitialized = true;
-  console.log('📱 Device motion listener initialized');
-}
-
-// Helper to request DeviceMotion permission on iOS 13+
-window.requestDeviceMotionPermission = function() {
-  console.log('📱 Requesting device motion permission...');
-  
-  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-    // iOS 13+ requires permission request
-    console.log('📱 iOS 13+ detected, requesting permission...');
-    return DeviceMotionEvent.requestPermission()
-      .then(permissionState => {
-        console.log('📱 Permission state:', permissionState);
-        if (permissionState === 'granted') {
-          initDeviceMotion();
-          return true;
-        }
-        return false;
-      })
-      .catch(error => {
-        console.error('❌ Permission request error:', error);
-        return false;
-      });
-  } else {
-    // Non-iOS 13+ devices (Android, older iOS) - no permission needed
-    console.log('📱 Non-iOS device, initializing directly...');
-    initDeviceMotion();
-    return Promise.resolve(true);
-  }
-};
-
-// Check if sensors are working
-window.checkSensorStatus = function() {
-  return {
-    initialized: window.sensorInitialized,
-    available: window.sensorAvailable,
-    lastData: window.latestAccelerometerData,
-    tiltActive: window.tiltDetection.isActive
-  };
-};
-
-// Auto-initialize for non-iOS devices
-if (typeof DeviceMotionEvent === 'undefined' || typeof DeviceMotionEvent.requestPermission !== 'function') {
-  console.log('📱 Auto-initializing sensor for non-iOS device...');
-  if (document.readyState === 'complete') {
-    initDeviceMotion();
-  } else {
-    window.addEventListener('load', initDeviceMotion);
+  // Aktuelle Neigung abfragen (für Debugging)
+  getCurrentOrientation() {
+    return this.currentState;
   }
 }
 
-console.log('✅ sensor_tilt.js loaded successfully v2');
+// Beispiel-Verwendung:
+/*
+const tiltController = new TiltController({
+  forwardThreshold: 30,    // Grad für "nach vorne"
+  backwardThreshold: -30,  // Grad für "nach hinten"
+  resetThreshold: 10,      // Zurück zu neutral
+  
+  onTiltForward: () => {
+    // Hier: Wort als richtig markieren, Bildschirm grün
+    console.log('✅ RICHTIG');
+  },
+  
+  onTiltBackward: () => {
+    // Hier: Wort überspringen, Bildschirm rot
+    console.log('❌ ÜBERSPRINGEN');
+  },
+  
+  onReset: () => {
+    // Zurück zu neutralem Zustand
+    console.log('⚪ NEUTRAL');
+  }
+});
+
+// Starten (mit Button-Klick wegen iOS-Berechtigung)
+document.getElementById('startBtn').addEventListener('click', async () => {
+  try {
+    await tiltController.start();
+    console.log('Bereit für Tilt-Steuerung!');
+  } catch (error) {
+    console.error('Fehler beim Starten:', error);
+  }
+});
+
+// Optional: Stoppen
+// tiltController.stop();
+*/
+
+// Export für Module
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TiltController;
+}

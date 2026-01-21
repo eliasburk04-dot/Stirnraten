@@ -1,40 +1,27 @@
-import 'package:js/js.dart';
-import 'dart:js_util';
-import 'dart:js' show allowInterop;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
 import 'package:flutter/foundation.dart';
 
 @JS('requestDeviceMotionPermission')
-external dynamic _requestDeviceMotionPermission();
+external JSPromise<JSBoolean> _requestDeviceMotionPermission();
 
 @JS('latestAccelerometerData')
-external dynamic get _latestAccelerometerData;
+external JSObject get _latestAccelerometerData;
 
 @JS('tiltDetection.start')
-external void _startTiltDetection(Function correctCallback, Function passCallback);
+external void _startTiltDetection(
+  JSFunction correctCallback,
+  JSFunction passCallback,
+);
 
 @JS('tiltDetection.stop')
 external void _stopTiltDetection();
 
-@JS('tiltDetection.isActive')
-external bool get _isTiltDetectionActive;
-
 Future<bool> requestSensorPermission() async {
   try {
-    final result = _requestDeviceMotionPermission();
-    if (result is Future) {
-      final v = await result;
-      return v == true;
-    }
-    // Handle Promise from JS
-    if (result != null) {
-      try {
-        final promiseResult = await promiseToFuture(result);
-        return promiseResult == true;
-      } catch (_) {
-        return result == true;
-      }
-    }
-    return result == true;
+    final result = await _requestDeviceMotionPermission().toDart;
+    return result.toDart;
   } catch (e) {
     debugPrint('⚠️ requestSensorPermission error: $e');
     return false;
@@ -44,26 +31,24 @@ Future<bool> requestSensorPermission() async {
 List<double> getWebAccelerometerData() {
   try {
     final data = _latestAccelerometerData;
-    if (data != null) {
-      final x = data.x;
-      final y = data.y;
-      final z = data.z;
-      return [
-        (x as num).toDouble(),
-        (y as num).toDouble(),
-        (z as num).toDouble(),
-      ];
-    }
+    final x = _readAxisValue(data, 'x');
+    final y = _readAxisValue(data, 'y');
+    final z = _readAxisValue(data, 'z');
+    return [x, y, z];
   } catch (_) {}
   return [0.0, 0.0, 0.0];
 }
 
+double _readAxisValue(JSObject data, String key) {
+  final value = data.getProperty<JSNumber?>(key.toJS);
+  return value?.toDartDouble ?? 0.0;
+}
+
 void startWebTiltDetection(Function correctCallback, Function passCallback) {
   try {
-    // IMPORTANT: Use allowInterop to make Dart functions callable from JavaScript
     _startTiltDetection(
-      allowInterop(correctCallback),
-      allowInterop(passCallback),
+      (correctCallback as void Function()).toJS,
+      (passCallback as void Function()).toJS,
     );
     debugPrint('✅ Web tilt detection started with allowInterop');
   } catch (e) {

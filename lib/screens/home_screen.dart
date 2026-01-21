@@ -63,17 +63,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _heroSlide = Tween<Offset>(
       begin: const Offset(0, 0.08),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _introController,
-      curve: const Interval(0.15, 0.8, curve: Curves.easeOutCubic),
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _introController,
+        curve: const Interval(0.15, 0.8, curve: Curves.easeOutCubic),
+      ),
+    );
     _ctaSlide = Tween<Offset>(
       begin: const Offset(0, 0.12),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _introController,
-      curve: const Interval(0.5, 1.0, curve: Curves.easeOutCubic),
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _introController,
+        curve: const Interval(0.5, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
 
     _pulse = CurvedAnimation(
       parent: _pulseController,
@@ -178,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       style: GoogleFonts.spaceGrotesk(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
-                                        color: Colors.white.withOpacity(0.45),
+                                        color: Colors.white.withValues(alpha: 0.45),
                                       ),
                                     ),
                                   ),
@@ -226,7 +230,7 @@ class _TopBar extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   letterSpacing: 0.6,
-                  color: Colors.white.withOpacity(0.55),
+                  color: Colors.white.withValues(alpha: 0.55),
                 ),
               ),
             ],
@@ -249,16 +253,16 @@ class _TopIcon extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withOpacity(0.18),
+          color: Colors.white.withValues(alpha: 0.18),
         ),
       ),
       child: Icon(
         icon,
         size: 20,
-        color: Colors.white.withOpacity(0.85),
+        color: Colors.white.withValues(alpha: 0.85),
       ),
     );
   }
@@ -293,12 +297,12 @@ class _HeroCardState extends State<_HeroCard> {
             borderRadius: outerRadius,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0F172A).withOpacity(0.6),
+                color: const Color(0xFF0F172A).withValues(alpha: 0.6),
                 blurRadius: 36,
                 offset: const Offset(0, 18),
               ),
               BoxShadow(
-                color: const Color(0xFFF97316).withOpacity(0.18),
+                color: const Color(0xFFF97316).withValues(alpha: 0.18),
                 blurRadius: 60,
                 offset: const Offset(0, 24),
               ),
@@ -336,8 +340,8 @@ class _HeroCardState extends State<_HeroCard> {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            const Color(0xFF0B0E16).withOpacity(0.18),
-                            const Color(0xFF0B0E16).withOpacity(0.85),
+                            const Color(0xFF0B0E16).withValues(alpha: 0.18),
+                            const Color(0xFF0B0E16).withValues(alpha: 0.85),
                           ],
                           stops: const [0.0, 0.6, 1.0],
                         ),
@@ -353,7 +357,7 @@ class _HeroCardState extends State<_HeroCard> {
                       decoration: BoxDecoration(
                         gradient: RadialGradient(
                           colors: [
-                            const Color(0xFFFFB347).withOpacity(0.35),
+                            const Color(0xFFFFB347).withValues(alpha: 0.35),
                             Colors.transparent,
                           ],
                         ),
@@ -378,8 +382,8 @@ class _HeroCardState extends State<_HeroCard> {
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.black.withOpacity(0.0),
-                                Colors.black.withOpacity(0.35),
+                                Colors.black.withValues(alpha: 0.0),
+                                Colors.black.withValues(alpha: 0.35),
                               ],
                             ),
                           ),
@@ -405,7 +409,7 @@ class _HeroCardState extends State<_HeroCard> {
                             color: Colors.white,
                             shadows: [
                               Shadow(
-                                color: Colors.black.withOpacity(0.35),
+                                color: Colors.black.withValues(alpha: 0.35),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -419,7 +423,7 @@ class _HeroCardState extends State<_HeroCard> {
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                             height: 1.4,
-                            color: Colors.white.withOpacity(0.68),
+                            color: Colors.white.withValues(alpha: 0.68),
                           ),
                         ),
                       ],
@@ -445,9 +449,9 @@ class _ModePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -462,7 +466,7 @@ class _ModePill extends StatelessWidget {
                 width: size,
                 height: size,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4ADE80).withOpacity(opacity),
+                  color: const Color(0xFF4ADE80).withValues(alpha: opacity),
                   shape: BoxShape.circle,
                 ),
               );
@@ -475,7 +479,7 @@ class _ModePill extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.8,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
         ],
@@ -531,13 +535,13 @@ class _StartButtonState extends State<_StartButton> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF8A34).withOpacity(0.35),
+                  color: const Color(0xFFFF8A34).withValues(alpha: 0.35),
                   blurRadius: 28,
                   offset: const Offset(0, 14),
                 ),
               ],
               border: Border.all(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha: 0.12),
               ),
             ),
             child: Stack(
@@ -548,7 +552,7 @@ class _StartButtonState extends State<_StartButton> {
                     duration: const Duration(milliseconds: 250),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withValues(alpha: 0.18),
                         borderRadius: borderRadius,
                       ),
                     ),
@@ -579,7 +583,7 @@ class _StartButtonState extends State<_StartButton> {
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -640,7 +644,7 @@ class _AnimatedBackground extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      const Color(0xFF0B0E16).withOpacity(0.6),
+                      const Color(0xFF0B0E16).withValues(alpha: 0.6),
                     ],
                   ),
                 ),
@@ -648,21 +652,21 @@ class _AnimatedBackground extends StatelessWidget {
             ),
             _GlowOrb(
               size: 420,
-              color: const Color(0xFFFB7185).withOpacity(0.25),
+              color: const Color(0xFFFB7185).withValues(alpha: 0.25),
               offset: Offset(-120 + driftX, -110 + driftY),
               alignment: Alignment.topLeft,
               blurRadius: 110,
             ),
             _GlowOrb(
               size: 380,
-              color: const Color(0xFF38BDF8).withOpacity(0.22),
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.22),
               offset: Offset(130 - driftX, 60 + driftY),
               alignment: Alignment.topRight,
               blurRadius: 120,
             ),
             _GlowOrb(
               size: 520,
-              color: const Color(0xFFF97316).withOpacity(0.18),
+              color: const Color(0xFFF97316).withValues(alpha: 0.18),
               offset: Offset(40 + driftY, 170 - driftX),
               alignment: Alignment.bottomLeft,
               blurRadius: 140,
@@ -680,7 +684,6 @@ class _GlowOrb extends StatelessWidget {
   final Offset offset;
   final Alignment alignment;
   final double blurRadius;
-  final double spreadRadius;
 
   const _GlowOrb({
     required this.size,
@@ -688,7 +691,6 @@ class _GlowOrb extends StatelessWidget {
     required this.offset,
     required this.alignment,
     this.blurRadius = 100,
-    this.spreadRadius = 10,
   });
 
   @override
@@ -705,9 +707,9 @@ class _GlowOrb extends StatelessWidget {
             color: color,
             boxShadow: [
               BoxShadow(
-                color: color.withOpacity(0.6),
+                color: color.withValues(alpha: 0.6),
                 blurRadius: blurRadius,
-                spreadRadius: spreadRadius,
+                spreadRadius: 10,
               ),
             ],
           ),

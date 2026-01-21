@@ -189,7 +189,7 @@ class StirnratenData {
       "The Color Purple", "12 Years a Slave", "The Color of Money", "The Insider", "Fight Club",
       "The Social Network: Facebook", "Zodiac", "The Departed: Scorsese", "Mystic River", "Shutter Island",
       "The Matrix Reloaded", "The Matrix Revolutions", "Minority Report", "A.I. Artificial Intelligence", "Children of Men",
-      "Lost in Translation", "Marie Antoinette", "The Royal Tenenbaums", "Moon", "Gravity"
+      "Lost in Translation", "Marie Antoinette", "The Royal Tenenbaums", "Moon", "Gravity",
     ],
 
     StirnratenCategory.series: [

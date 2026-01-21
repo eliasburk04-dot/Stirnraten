@@ -3,13 +3,22 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sensors_plus/sensors_plus.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
 import '../services/category_service.dart';
 import '../utils/sensor_helper.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
+
+const Color _categoryPrimary = Color(0xFFF9F506);
+const Color _categoryBackground = Color(0xFF1A1A0F);
+const Color _categorySurface = Color(0xFF23220F);
+const Color _categoryGlass = Color(0x6623220F);
+const Color _categoryBorder = Color(0x14FFFFFF);
+const double _categoryCardRadius = 24;
 
 enum StirnratenGameState { setup, countdown, playing, result }
 
@@ -45,6 +54,23 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   // Feedback
   Color? _feedbackColor;
   Timer? _feedbackTimer;
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
+  String _searchQuery = '';
+  late final List<_CategoryCardData> _categoryItems;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode()
+      ..addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    _categoryItems = _buildCategoryItems();
+  }
 
   @override
   void dispose() {
@@ -66,6 +92,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -97,9 +125,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                     maxLines: 4,
                     decoration: InputDecoration(
                       hintText: 'Apfel, Birne, Banane...',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: Colors.white.withValues(alpha: 0.05),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
@@ -170,13 +198,13 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                         children: snapshot.data!.map((cat) => Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                             title: Text(cat.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                            subtitle: Text('${cat.words.length} Wörter', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                            subtitle: Text('${cat.words.length} Wörter', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -200,7 +228,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                               controller.text = cat.words.join(', ');
                             },
                           ),
-                        )).toList(),
+                        ),).toList(),
                       );
                     },
                   ),
@@ -215,7 +243,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.withOpacity(0.2),
+                backgroundColor: Colors.blue.withValues(alpha: 0.2),
                 foregroundColor: Colors.blue,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -255,7 +283,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ),
             const SizedBox(height: 20),
             DropdownButtonFormField<int>(
-              value: _selectedTime,
+              initialValue: _selectedTime,
               dropdownColor: const Color(0xFF1E293B),
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
@@ -270,7 +298,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   .map((time) => DropdownMenuItem<int>(
                         value: time,
                         child: Text('$time Sekunden'),
-                      ))
+                      ),)
                   .toList(),
               onChanged: (value) {
                 if (value != null) {
@@ -301,10 +329,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         _selectedCategories.add(category);
       }
     });
-  }
-
-  void _clearSelection() {
-    setState(() => _selectedCategories.clear());
   }
 
   void _startSelectedCategories() {
@@ -669,187 +693,125 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     );
   }
 
+  List<_CategoryCardData> _buildCategoryItems() {
+    return StirnratenCategory.values.map((category) {
+      final title = StirnratenData.categoryNames[category] ?? category.name;
+      final wordCount = StirnratenData.getWords(category).length;
+      final subtitle = category == StirnratenCategory.ownWords
+          ? 'Custom lists'
+          : '$wordCount+ words';
+      final tags = wordCount >= 120 ? const ['POPULAR'] : const <String>[];
+      final difficulty = wordCount >= 140 ? 'HARD' : null;
+      final progress = wordCount >= 140 ? 0.75 : null;
+      return _CategoryCardData(
+        category: category,
+        title: title,
+        subtitle: subtitle,
+        icon: StirnratenData.categoryIcons[category],
+        accentColor: _getCategoryGradient(category).first,
+        tags: tags,
+        isNsfw: false,
+        difficulty: difficulty,
+        progress: progress,
+        isOwnWords: category == StirnratenCategory.ownWords,
+      );
+    }).toList();
+  }
+
+  List<_CategoryCardData> get _filteredCategories {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return _categoryItems;
+    }
+    return _categoryItems.where((item) {
+      final haystack = <String>[
+        item.title,
+        item.subtitle,
+        ...item.tags,
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+  }
+
   Widget _buildSetup() {
-    return SafeArea(
-      child: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-              child: Column(
-                children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(32),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.red.withAlpha(60),
-                          blurRadius: 20,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(32),
-                      child: Image.asset(
-                        'assets/images/stirnraten_image.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Stirnraten',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
+    final filteredCategories = _filteredCategories;
+    final selectedCount = _selectedCategories.length;
+    const bottomBarHeight = 104.0;
+
+    return DefaultTextStyle(
+      style: GoogleFonts.spaceGrotesk(
+        color: Colors.white,
+      ),
+      child: Stack(
+        children: [
+          const _CategoryBackground(),
+          SafeArea(
+            child: ScrollConfiguration(
+              behavior: const _NoScrollbarBehavior(),
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _CategoryHeaderDelegate(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      isFocused: _searchFocusNode.hasFocus,
+                      onBack: () => Navigator.pop(context),
+                      onSettings: _showTimeSelectionDialog,
+                      onQueryChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Waehle eine oder mehrere Kategorien',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0x8CFFFFFF),
-                      letterSpacing: 0.3,
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      12,
+                      20,
+                      bottomBarHeight,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Time Selection
-                  GestureDetector(
-                    onTap: () => _showTimeSelectionDialog(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.timer_outlined, color: Colors.white70, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Zeit: $_selectedTime Sek.',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, color: Colors.white70),
-                        ],
-                      ),
+                    sliver: SliverMasonryGrid.count(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 14,
+                      childCount: filteredCategories.length,
+                      itemBuilder: (context, index) {
+                        final item = filteredCategories[index];
+                        final isSelected =
+                            _selectedCategories.contains(item.category);
+                        return _CategoryCard(
+                          data: item,
+                          isSelected: isSelected,
+                          onTap: () {
+                            if (item.isOwnWords) {
+                              _showOwnWordsDialog();
+                            } else {
+                              _toggleCategory(item.category);
+                            }
+                          },
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 1.0,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final category = StirnratenCategory.values[index];
-                  final colors = _getCategoryGradient(category);
-                  final isOwnWords = category == StirnratenCategory.ownWords;
-                  return _CategoryCard(
-                    title: StirnratenData.categoryNames[category]!,
-                    icon: StirnratenData.categoryIcons[category]!,
-                    gradientColors: colors,
-                    isSelected:
-                        !isOwnWords && _selectedCategories.contains(category),
-                    onTap: () {
-                      if (isOwnWords) {
-                        _showOwnWordsDialog();
-                      } else {
-                        _toggleCategory(category);
-                      }
-                    },
-                  );
-                },
-                childCount: StirnratenCategory.values.length,
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 8),
-              child: Column(
-                children: [
-                  Text(
-                    _selectedCategories.isEmpty
-                        ? 'Keine Kategorien ausgewaehlt'
-                        : '${_selectedCategories.length} Kategorie'
-                            '${_selectedCategories.length == 1 ? '' : 'n'} '
-                            'ausgewaehlt',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xB3FFFFFF),
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GlassButton(
-                    text: 'Auswahl starten',
-                    isFullWidth: true,
-                    gradientColors: const [
-                      Color(0xFFEF4444),
-                      Color(0xFFF59E0B),
-                    ],
-                    onPressed: _selectedCategories.isEmpty
-                        ? null
-                        : _startSelectedCategories,
-                  ),
-                  if (_selectedCategories.isNotEmpty)
-                    TextButton(
-                      onPressed: _clearSelection,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                      ),
-                      child: const Text('Auswahl leeren'),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Text(
-                    '← Zurück',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0x8CFFFFFF),
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          _BottomActionBar(
+            selectedCount: selectedCount,
+            onPressed: selectedCount == 0 ? null : _startSelectedCategories,
           ),
         ],
       ),
     );
+  }
+
+  // ignore: unused_element
+  Widget _buildLegacySetup() {
+    return const SizedBox.shrink();
   }
 
   List<Color> _getCategoryGradient(StirnratenCategory category) {
@@ -918,8 +880,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         return [const Color(0xFFEF4444), const Color(0xFFF87171)];
       case StirnratenCategory.ownWords:
         return [const Color(0xFF8B5CF6), const Color(0xFFEC4899)];
-      default:
-        return [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
     }
   }
 
@@ -1174,18 +1134,40 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 }
 
-class _CategoryCard extends StatefulWidget {
+class _CategoryCardData {
+  const _CategoryCardData({
+    required this.category,
+    required this.title,
+    required this.subtitle,
+    required this.accentColor,
+    this.icon,
+    this.tags = const <String>[],
+    this.isNsfw = false,
+    this.difficulty,
+    this.progress,
+    this.isOwnWords = false,
+  });
+
+  final StirnratenCategory category;
   final String title;
-  final IconData icon;
-  final List<Color> gradientColors;
+  final String subtitle;
+  final Color? accentColor;
+  final IconData? icon;
+  final List<String> tags;
+  final bool isNsfw;
+  final String? difficulty;
+  final double? progress;
+  final bool isOwnWords;
+}
+
+class _CategoryCard extends StatefulWidget {
+  final _CategoryCardData data;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _CategoryCard({
-    required this.title,
-    required this.icon,
-    required this.gradientColors,
-    this.isSelected = false,
+    required this.data,
+    required this.isSelected,
     required this.onTap,
   });
 
@@ -1194,136 +1176,777 @@ class _CategoryCard extends StatefulWidget {
 }
 
 class _CategoryCardState extends State<_CategoryCard> {
-  bool _isPressed = false;
+  bool _hovered = false;
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) {
+      setState(() => _pressed = value);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isSelected = widget.isSelected;
-    final borderColor = isSelected
-        ? Colors.white.withOpacity(0.7)
-        : widget.gradientColors[0].withAlpha(102);
-    final startColor =
-        widget.gradientColors[0].withAlpha(isSelected ? 90 : 51);
-    final endColor = widget.gradientColors[1].withAlpha(isSelected ? 60 : 26);
+    final accent = widget.data.accentColor ?? _categoryPrimary;
+    final borderColor = widget.isSelected
+        ? _categoryPrimary
+        : (_hovered
+            ? Colors.white.withValues(alpha: 0.18)
+            : _categoryBorder);
+    final scale = _pressed ? 0.95 : (_hovered ? 1.02 : 1.0);
+    final showGlow = widget.isSelected || _hovered;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    startColor,
-                    endColor,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(_categoryCardRadius),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _categoryGlass,
+                  borderRadius: BorderRadius.circular(_categoryCardRadius),
+                  border: Border.all(
+                    color: borderColor,
+                    width: widget.isSelected ? 2 : 1,
+                  ),
+                  boxShadow: showGlow
+                      ? [
+                          BoxShadow(
+                            color: accent.withValues(
+                              alpha: widget.isSelected ? 0.35 : 0.18,
+                            ),
+                            blurRadius: 26,
+                            offset: const Offset(0, 12),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _CategoryIconBadge(
+                          icon: widget.data.icon,
+                          accent: accent,
+                        ),
+                        const Spacer(),
+                        if (widget.data.isNsfw || widget.isSelected)
+                          Wrap(
+                            spacing: 6,
+                            children: [
+                              if (widget.data.isNsfw)
+                                const _CategoryBadge(
+                                  label: '18+',
+                                  background: Color(0xFFB91C1C),
+                                  textColor: Colors.white,
+                                ),
+                              if (widget.isSelected)
+                                const _CategoryBadge(
+                                  label: 'SELECTED',
+                                  background: _categoryPrimary,
+                                  textColor: _categoryBackground,
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.data.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.data.subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    if (widget.data.tags.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: widget.data.tags
+                            .map(
+                              (tag) => _TagChip(
+                                label: tag,
+                                color: accent,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    if (widget.data.progress != null ||
+                        widget.data.difficulty != null) ...[
+                      const SizedBox(height: 10),
+                      _CategoryProgress(
+                        progress: widget.data.progress,
+                        difficulty: widget.data.difficulty,
+                        accent: accent,
+                      ),
+                    ],
                   ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: borderColor,
-                  width: 1.5,
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: widget.gradientColors[0].withOpacity(0.35),
-                          blurRadius: 14,
-                          offset: const Offset(0, 6),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Stack(
-                children: [
-                  // Background Icon
-                  Positioned(
-                    right: -10,
-                    bottom: -10,
-                    child: Icon(
-                      widget.icon,
-                      size: 60,
-                      color: Colors.white.withOpacity(
-                        isSelected ? 0.22 : 0.15,
-                      ),
-                    ),
-                  ),
-                  if (isSelected)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.white.withOpacity(0.08),
-                      ),
-                    ),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            widget.icon,
-                            color: Colors.white.withOpacity(
-                              isSelected ? 1.0 : 0.9,
-                            ),
-                            size: 28,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.title,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (isSelected)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.6),
-                            width: 1,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.check,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _CategoryIconBadge extends StatelessWidget {
+  final IconData? icon;
+  final Color accent;
+
+  const _CategoryIconBadge({
+    required this.icon,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.45),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.25),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: icon == null
+          ? const SizedBox.shrink()
+          : Icon(
+              icon,
+              color: Colors.white,
+              size: 22,
+            ),
+    );
+  }
+}
+
+class _CategoryBadge extends StatelessWidget {
+  final String label;
+  final Color background;
+  final Color textColor;
+
+  const _CategoryBadge({
+    required this.label,
+    required this.background,
+    required this.textColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _TagChip({
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: color.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryProgress extends StatelessWidget {
+  final double? progress;
+  final String? difficulty;
+  final Color accent;
+
+  const _CategoryProgress({
+    required this.progress,
+    required this.difficulty,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (progress ?? 0.0).clamp(0.0, 1.0);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 6,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: 0.9),
+                        accent.withValues(alpha: 0.45),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (difficulty != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            difficulty!,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BottomActionBar extends StatelessWidget {
+  final int selectedCount;
+  final VoidCallback? onPressed;
+
+  const _BottomActionBar({
+    required this.selectedCount,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                _categoryBackground.withValues(alpha: 0.0),
+                _categoryBackground.withValues(alpha: 0.8),
+                _categoryBackground,
+              ],
+            ),
+          ),
+          child: _PrimaryActionButton(
+            label: 'Play ($selectedCount Selected)',
+            onTap: onPressed,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrimaryActionButton extends StatefulWidget {
+  final String label;
+  final VoidCallback? onTap;
+
+  const _PrimaryActionButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  State<_PrimaryActionButton> createState() => _PrimaryActionButtonState();
+}
+
+class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) {
+      setState(() => _pressed = value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = widget.onTap != null;
+    final backgroundColor =
+        isEnabled ? _categoryPrimary : _categorySurface.withValues(alpha: 0.6);
+    final foregroundColor =
+        isEnabled ? _categoryBackground : Colors.white.withValues(alpha: 0.4);
+
+    return GestureDetector(
+      onTapDown: isEnabled ? (_) => _setPressed(true) : null,
+      onTapUp: isEnabled ? (_) => _setPressed(false) : null,
+      onTapCancel: isEnabled ? () => _setPressed(false) : null,
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed && isEnabled ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: isEnabled
+                ? [
+                    BoxShadow(
+                      color: _categoryPrimary.withValues(alpha: 0.35),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text(
+                widget.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: foregroundColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              Positioned(
+                right: 18,
+                child: Icon(
+                  Icons.play_arrow_rounded,
+                  color: foregroundColor,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool isFocused;
+  final VoidCallback onBack;
+  final VoidCallback onSettings;
+  final ValueChanged<String> onQueryChanged;
+
+  _CategoryHeaderDelegate({
+    required this.controller,
+    required this.focusNode,
+    required this.isFocused,
+    required this.onBack,
+    required this.onSettings,
+    required this.onQueryChanged,
+  });
+
+  @override
+  double get minExtent => 128;
+
+  @override
+  double get maxExtent => 128;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final showShadow = overlapsContent || shrinkOffset > 0;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          decoration: BoxDecoration(
+            color: _categoryBackground.withValues(alpha: 0.9),
+            boxShadow: showShadow
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 18,
+                      offset: const Offset(0, 12),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _IconCircleButton(
+                    icon: Icons.arrow_back_rounded,
+                    onTap: onBack,
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Stirnraten',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  _IconCircleButton(
+                    icon: Icons.settings_rounded,
+                    onTap: onSettings,
+                    isPrimary: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _SearchField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: onQueryChanged,
+                isFocused: isFocused,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _CategoryHeaderDelegate oldDelegate) {
+    return oldDelegate.controller != controller ||
+        oldDelegate.focusNode != focusNode ||
+        oldDelegate.isFocused != isFocused ||
+        oldDelegate.onBack != onBack ||
+        oldDelegate.onSettings != onSettings ||
+        oldDelegate.onQueryChanged != onQueryChanged;
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final bool isFocused;
+
+  const _SearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.isFocused,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: _categorySurface.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isFocused ? _categoryPrimary : Colors.white.withValues(alpha: 0.08),
+        ),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: _categoryPrimary.withValues(alpha: 0.2),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.search_rounded,
+            color: Colors.white.withValues(alpha: 0.5),
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              style: GoogleFonts.spaceGrotesk(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search decks...',
+                hintStyle: GoogleFonts.spaceGrotesk(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IconCircleButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isPrimary;
+
+  const _IconCircleButton({
+    required this.icon,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  @override
+  State<_IconCircleButton> createState() => _IconCircleButtonState();
+}
+
+class _IconCircleButtonState extends State<_IconCircleButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) {
+      setState(() => _pressed = value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = widget.isPrimary
+        ? _categoryPrimary
+        : _categoryGlass;
+    final borderColor = widget.isPrimary
+        ? _categoryPrimary
+        : Colors.white.withValues(alpha: 0.12);
+    final iconColor = widget.isPrimary
+        ? _categoryBackground
+        : Colors.white.withValues(alpha: 0.85);
+    final scale = _pressed ? 0.94 : (_hovered ? 1.03 : 1.0);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: scale,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+              boxShadow: widget.isPrimary
+                  ? [
+                      BoxShadow(
+                        color: _categoryPrimary.withValues(alpha: 0.3),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              color: iconColor,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryBackground extends StatelessWidget {
+  const _CategoryBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _categoryBackground,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _categoryBackground,
+            _categorySurface.withValues(alpha: 0.45),
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -80,
+            right: -40,
+            child: _GlowOrb(
+              color: _categoryPrimary.withValues(alpha: 0.16),
+              size: 240,
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -60,
+            child: _GlowOrb(
+              color: const Color(0xFF4ADE80).withValues(alpha: 0.16),
+              size: 280,
+            ),
+          ),
+          Positioned(
+            top: 140,
+            left: -90,
+            child: _GlowOrb(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+              size: 220,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlowOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowOrb({
+    required this.size,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.6),
+            blurRadius: 120,
+            spreadRadius: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoScrollbarBehavior extends ScrollBehavior {
+  const _NoScrollbarBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
+  }
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }

@@ -10,10 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Firebase for real-time multiplayer
-  firebase_core: ^4.3.0
-  firebase_database: ^12.1.1
-    
   # State management
   provider: ^6.1.1
   

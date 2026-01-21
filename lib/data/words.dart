@@ -111,7 +111,7 @@ class StirnratenData {
 
   static const Map<StirnratenCategory, List<String>> words = {
     StirnratenCategory.ownWords: [],
-    StirnratenCategory.anime = [
+    StirnratenCategory.anime: [
     "Naruto",
     "Naruto Shippuden",
   "One Piece",
@@ -236,7 +236,7 @@ class StirnratenData {
   "Beastars",
   "Odd Taxi",
   "Ergo Proxy",
-  "Texhnolyze"
+  "Texhnolyze",
 ],
 
 
@@ -262,7 +262,7 @@ class StirnratenData {
       "Jek Porkins", "Garven Dreis", "Dutch Vander", "Pops Krail",
     ],
 
-    StirnratenCategory.films = [
+    StirnratenCategory.films: [
   "Titanic",
   "The Matrix",
   "The Matrix Reloaded",
@@ -398,7 +398,7 @@ class StirnratenData {
   "Lost in Translation",
   "The Royal Tenenbaums",
   "Moon",
-  "Gravity"
+  "Gravity",
 ],
 
     StirnratenCategory.series: [
@@ -438,7 +438,7 @@ class StirnratenData {
       "Sharp Objects", "Mare of Easttown", "Beef",
     ],
 
- StirnratenCategory.music = [
+    StirnratenCategory.music: [
   "The Beatles",
   "Elvis Presley",
   "Michael Jackson",
@@ -620,7 +620,7 @@ class StirnratenData {
   "The Killers",
   "Muse",
   "The Smashing Pumpkins",
-  "Blur"
+  "Blur",
 ],
 
     StirnratenCategory.videogames: [

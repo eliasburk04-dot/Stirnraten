@@ -117,8 +117,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   constraints.maxHeight - (verticalPadding * 2),
                 );
                 final heroHeight = min(
-                  380.0,
-                  max(280.0, constraints.maxHeight * 0.42),
+                  440.0,
+                  max(320.0, constraints.maxHeight * 0.52),
                 );
 
                 return Center(
@@ -207,8 +207,6 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const _TopIcon(icon: Icons.menu_rounded),
-        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -556,13 +554,12 @@ class _StartButtonState extends State<_StartButton> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Text(
+                Stack(
+                  children: [
+                    Center(
+                      child: Text(
                         'Runde starten',
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.spaceGrotesk(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -570,29 +567,30 @@ class _StartButtonState extends State<_StartButton> {
                           color: Colors.white,
                         ),
                       ),
-                      Positioned(
-                        right: 0,
-                        child: AnimatedSlide(
-                          offset:
-                              _hovered ? const Offset(0.08, 0) : Offset.zero,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.arrow_forward_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
+                    ),
+                    Positioned(
+                      right: 18,
+                      top: 0,
+                      bottom: 0,
+                      child: AnimatedSlide(
+                        offset: _hovered ? const Offset(0.08, 0) : Offset.zero,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 18,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),

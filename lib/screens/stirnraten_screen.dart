@@ -39,7 +39,6 @@ const int _tiltCalibrationMs = 1000;
 
 enum _TiltPhase { idle, calibrating, activeWord, triggered, cooldown }
 enum _TiltAction { correct, pass }
-enum _WebTiltDialogAction { continueWithout, retry }
 
 class _TiltDetector {
   _TiltDetector({
@@ -200,11 +199,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   bool _receivedSensorEvent = false;
   Timer? _sensorAvailabilityTimer;
   double _lastPitchDeg = 0.0;
-  bool _webTiltPermissionRequired = false;
-  bool _webTiltPermissionGranted = false;
-  bool _webTiltEnabled = false;
-  bool _webTiltPermissionDenied = false;
-  bool _webTiltPreflightInProgress = false;
+  
   
   // Feedback
   Color? _feedbackColor;
@@ -230,10 +225,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       });
     _categoryItems = _buildCategoryItems();
     _loadCustomWordLists();
-    if (kIsWeb) {
-      _webTiltPermissionRequired = isTiltPermissionRequired();
-      _webTiltPermissionGranted = !_webTiltPermissionRequired;
-    }
   }
 
   @override
@@ -245,11 +236,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _accelerometerSubscription = null;
     _sensorAvailabilityTimer?.cancel();
     _tiltDetector.stop();
-    
-    if (kIsWeb) {
-      stopWebTiltDetection();
-    }
-    
+
     if (kDebugMode) {
       debugPrint('🎮 Stirnraten: Sensors cleaned up');
     }
@@ -301,27 +288,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   Future<void> _startCountdownWithWords(List<String> words) async {
-    if (_webTiltPreflightInProgress) return;
-    _webTiltPreflightInProgress = true;
-
     // Unlock audio context on user interaction
     context.read<SoundService>().unlock();
 
-    try {
-      if (kIsWeb) {
-        _webTiltEnabled = false;
-        _webTiltPermissionDenied = false;
-        final tiltAvailable = await _ensureWebTiltPermissionForStart();
-        if (!mounted) return;
-        _webTiltEnabled = tiltAvailable;
-      } else {
-        _sensorPermissionGranted = await requestSensorPermission();
-      }
-    } finally {
-      _webTiltPreflightInProgress = false;
+    if (!kIsWeb) {
+      _sensorPermissionGranted = await requestSensorPermission();
     }
-
-    if (!mounted) return;
 
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
@@ -354,18 +326,13 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       _engine.startGame();
       _feedbackColor = null; // Reset any lingering feedback
       _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
-      if (kIsWeb) {
-        _webTiltEnabled = _webTiltPermissionGranted;
-      }
     });
     if (_snapshot.state == StirnratenGameState.result) {
       _endGame();
       return;
     }
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (kIsWeb) {
-      _tiltDetector.stop();
-    } else {
+    if (!kIsWeb) {
       _tiltDetector.start(nowMs);
     }
     _receivedSensorEvent = false;
@@ -412,15 +379,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       }
     }
     
-    if (kIsWeb) {
-      if (_webTiltPermissionGranted) {
-        startWebTiltDetection(_handleCorrect, _handlePass);
-      } else if (kDebugMode) {
-        debugPrint('🌐 Web tilt awaiting permission');
-      }
-      return;
-    }
-
     // Mobile: Use Dart sensor stream
     if (kDebugMode) {
       debugPrint('📱 Using Dart sensor stream for Mobile');
@@ -440,85 +398,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     if (kDebugMode) {
       debugPrint('✅ Sensor listeners activated');
     }
-  }
-
-  Future<bool> _ensureWebTiltPermissionForStart() async {
-    final supported = isTiltSupported();
-    _webTiltPermissionRequired = isTiltPermissionRequired();
-
-    if (!supported) {
-      _webTiltPermissionGranted = false;
-      _webTiltPermissionDenied = true;
-      _webTiltEnabled = false;
-      await _showWebTiltUnavailableDialog(
-        message:
-            'Bewegungssteuerung ist auf diesem Geraet nicht verfuegbar. Du kannst trotzdem mit Buttons spielen.',
-        canRetry: false,
-      );
-      return false;
-    }
-
-    if (!_webTiltPermissionRequired) {
-      _webTiltPermissionGranted = true;
-      _webTiltPermissionDenied = false;
-      _webTiltEnabled = true;
-      return true;
-    }
-
-    final granted = await requestSensorPermission();
-    if (granted) {
-      _webTiltPermissionGranted = true;
-      _webTiltPermissionDenied = false;
-      _webTiltEnabled = true;
-      return true;
-    }
-
-    final action = await _showWebTiltUnavailableDialog(
-      message:
-          'Bewegungssteuerung nicht erlaubt. Du kannst trotzdem mit Buttons spielen.',
-      canRetry: true,
-    );
-
-    if (action == _WebTiltDialogAction.retry) {
-      return _ensureWebTiltPermissionForStart();
-    }
-
-    _webTiltPermissionGranted = false;
-    _webTiltPermissionDenied = true;
-    _webTiltEnabled = false;
-    return false;
-  }
-
-  Future<_WebTiltDialogAction> _showWebTiltUnavailableDialog({
-    required String message,
-    required bool canRetry,
-  }) async {
-    final action = await showDialog<_WebTiltDialogAction>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Bewegungssteuerung'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(
-              context,
-              _WebTiltDialogAction.continueWithout,
-            ),
-            child: const Text('Weiter ohne Tilt'),
-          ),
-          if (canRetry)
-            TextButton(
-              onPressed: () => Navigator.pop(
-                context,
-                _WebTiltDialogAction.retry,
-              ),
-              child: const Text('Erneut versuchen'),
-            ),
-        ],
-      ),
-    );
-    return action ?? _WebTiltDialogAction.continueWithout;
   }
 
   void _processSensorData(double x, double y, double z) {
@@ -570,8 +449,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     if (kIsWeb) return;
     if (!mounted || _snapshot.state != StirnratenGameState.playing) return;
     if (_receivedSensorEvent) return;
-    final webAvailable = kIsWeb ? getWebSensorAvailable() : _receivedSensorEvent;
-    final sensorAvailable = _sensorPermissionGranted && webAvailable;
+    final sensorAvailable = _sensorPermissionGranted && _receivedSensorEvent;
     if (!sensorAvailable && !_showFallbackButtons) {
       setState(() => _showFallbackButtons = true);
     }
@@ -780,11 +658,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _accelerometerSubscription?.cancel();
     _sensorAvailabilityTimer?.cancel();
     _tiltDetector.stop();
-    
-    if (kIsWeb) {
-      stopWebTiltDetection();
-    }
-    
+
     context.read<SoundService>().playEnd();
     
     SystemChrome.setPreferredOrientations([
@@ -794,7 +668,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
     setState(() {
       _engine.endGame();
-      _webTiltEnabled = false;
     });
   }
 
@@ -1173,27 +1046,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ],
           ),
         ),
-        if (kDebugMode && kIsWeb)
-          Positioned(
-            left: 16,
-            bottom: 80,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                "tilt ${_webTiltPermissionGranted ? 'granted' : (_webTiltPermissionDenied ? 'denied' : 'unknown')}\n"
-                "enabled ${_webTiltEnabled ? 'yes' : 'no'}",
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  height: 1.2,
-                ),
-              ),
-            ),
-          ),
         if (kDebugMode && !kIsWeb)
           Positioned(
             left: 16,

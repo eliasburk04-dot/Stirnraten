@@ -14,7 +14,7 @@ void main() {
     await tester.pumpWidget(const StirnratenApp());
     await tester.pump();
 
-    expect(find.text('Party Modus'), findsOneWidget);
+    expect(find.text('PARTY MODUS'), findsOneWidget);
     expect(find.text('Runde starten'), findsOneWidget);
   });
 }

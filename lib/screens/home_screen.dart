@@ -372,11 +372,11 @@ class _StartCard extends StatelessWidget {
               right: 0,
               child: Container(
                 height: 6,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.vertical(
                     top: Radius.circular(_homeCardRadius),
                   ),
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     colors: [
                       Color(0xFFFFA83A),
                       Color(0xFFF25B8F),
@@ -490,10 +490,10 @@ class _SmileyBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(
+      child: const Icon(
         Icons.sentiment_satisfied_rounded,
         size: 16,
-        color: const Color(0xFFE11D74),
+        color: Color(0xFFE11D74),
       ),
     );
 
@@ -662,7 +662,7 @@ class _StartButtonState extends State<_StartButton> {
                     shape: BoxShape.circle,
                     color: Colors.white,
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.play_arrow_rounded,
                     color: _homeText,
                     size: 24,

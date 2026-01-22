@@ -2,6 +2,35 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/effects_quality.dart';
+
+class GlassBackdrop extends StatelessWidget {
+  final double blurSigma;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const GlassBackdrop({
+    super.key,
+    required this.blurSigma,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = blurSigma <= 0
+        ? child
+        : BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            child: child,
+          );
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: content,
+    );
+  }
+}
+
 /// Wiederverwendbare Glassmorphism Card
 class GlassCard extends StatelessWidget {
   final Widget child;
@@ -21,51 +50,53 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma = effects.blur(high: 6, medium: 4, low: 0);
+    final shadowBlur = effects.shadowBlur(high: 24, medium: 16, low: 10);
+    final borderRadius = BorderRadius.circular(24);
     final card = Container(
       height: height,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: borderRadius,
         boxShadow: gradientColors != null
             ? [
                 BoxShadow(
                   color: gradientColors![0].withAlpha(40),
-                  blurRadius: 24,
+                  blurRadius: shadowBlur,
                   offset: const Offset(0, 12),
                 ),
               ]
             : [
                 BoxShadow(
                   color: Colors.black.withAlpha(51),
-                  blurRadius: 16,
+                  blurRadius: shadowBlur,
                   offset: const Offset(0, 8),
                 ),
               ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: RepaintBoundary(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.white.withAlpha(15),
-                    Colors.white.withAlpha(8),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.white.withAlpha(25),
-                  width: 1.5,
-                ),
+      child: RepaintBoundary(
+        child: GlassBackdrop(
+          blurSigma: blurSigma,
+          borderRadius: borderRadius,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withAlpha(15),
+                  Colors.white.withAlpha(8),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Padding(
-                padding: padding ?? const EdgeInsets.all(24),
-                child: child,
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: Colors.white.withAlpha(25),
+                width: 1.5,
               ),
+            ),
+            child: Padding(
+              padding: padding ?? const EdgeInsets.all(24),
+              child: child,
             ),
           ),
         ),
@@ -147,11 +178,14 @@ class _GlassButtonState extends State<GlassButton> {
   @override
   Widget build(BuildContext context) {
     final isEnabled = widget.onPressed != null;
+    final effects = EffectsConfig.of(context);
     final gradientColors = widget.gradientColors ??
         [
           const Color(0xFF7C3AED),
           const Color(0xFFEC4899),
         ];
+    final shadowBlur = effects.shadowBlur(high: 12, medium: 8, low: 0);
+    final shadowAlpha = effects.shadowAlpha(high: 0.3, medium: 0.18, low: 0);
 
     return GestureDetector(
       onTapDown: isEnabled ? (_) => setState(() => _isPressed = true) : null,
@@ -171,58 +205,59 @@ class _GlassButtonState extends State<GlassButton> {
           child: Container(
             width: widget.isFullWidth ? double.infinity : null,
             padding: EdgeInsets.symmetric(
-            horizontal: widget.isFullWidth ? 32 : 40,
-            vertical: 18,
-          ),
-          decoration: BoxDecoration(
-            gradient: widget.isPrimary
-                ? LinearGradient(
-                    colors: gradientColors,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(16),
-            border: !widget.isPrimary
-                ? Border.all(
-                    color: Colors.white.withAlpha(51),
-                    width: 1.5,
-                  )
-                : null,
-            boxShadow: widget.isPrimary
-                ? [
-                    BoxShadow(
-                      color: gradientColors[0].withAlpha(77),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(
-                  widget.icon,
-                  color: Colors.white,
-                  size: 20,
+              horizontal: widget.isFullWidth ? 32 : 40,
+              vertical: 18,
+            ),
+            decoration: BoxDecoration(
+              gradient: widget.isPrimary
+                  ? LinearGradient(
+                      colors: gradientColors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(16),
+              border: !widget.isPrimary
+                  ? Border.all(
+                      color: Colors.white.withAlpha(51),
+                      width: 1.5,
+                    )
+                  : null,
+              boxShadow: widget.isPrimary && shadowBlur > 0
+                  ? [
+                      BoxShadow(
+                        color: gradientColors[0]
+                            .withValues(alpha: shadowAlpha),
+                        blurRadius: shadowBlur,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(
+                    widget.icon,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Text(
+                  widget.text,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
                 ),
-                const SizedBox(width: 12),
               ],
-              Text(
-                widget.text,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -262,6 +297,9 @@ class GlassTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma = effects.blur(high: 6, medium: 4, low: 0);
+    final borderRadius = BorderRadius.circular(16);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -277,49 +315,47 @@ class GlassTextField extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withAlpha(10),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.white.withAlpha(25),
-                  width: 1.5,
-                ),
+        GlassBackdrop(
+          blurSigma: blurSigma,
+          borderRadius: borderRadius,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(10),
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: Colors.white.withAlpha(25),
+                width: 1.5,
               ),
-              child: TextField(
-                controller: controller,
-                maxLength: maxLength,
-                keyboardType: keyboardType,
-                autofocus: autofocus,
-                onChanged: onChanged,
-                onSubmitted: onSubmitted,
-                inputFormatters: inputFormatters,
-                textAlign: textAlign,
-                textCapitalization: textCapitalization,
-                style: style ??
-                    const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                      letterSpacing: 0.2,
-                    ),
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  hintStyle: TextStyle(
-                    color: Colors.white.withAlpha(102),
-                    fontWeight: FontWeight.w400,
+            ),
+            child: TextField(
+              controller: controller,
+              maxLength: maxLength,
+              keyboardType: keyboardType,
+              autofocus: autofocus,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              inputFormatters: inputFormatters,
+              textAlign: textAlign,
+              textCapitalization: textCapitalization,
+              style: style ??
+                  const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 18,
-                  ),
-                  counterText: '',
+              decoration: InputDecoration(
+                hintText: hintText,
+                hintStyle: TextStyle(
+                  color: Colors.white.withAlpha(102),
+                  fontWeight: FontWeight.w400,
                 ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 18,
+                ),
+                counterText: '',
               ),
             ),
           ),
@@ -344,35 +380,41 @@ class GlassOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-      child: Container(
-        color: color.withAlpha(204),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 120,
-                color: Colors.white,
-              ),
-              if (text != null) ...[
-                const SizedBox(height: 24),
-                Text(
-                  text!,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
+    final effects = EffectsConfig.of(context);
+    final blurSigma = effects.blur(high: 4, medium: 2, low: 0);
+    final overlay = Container(
+      color: color.withAlpha(204),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 120,
+              color: Colors.white,
+            ),
+            if (text != null) ...[
+              const SizedBox(height: 24),
+              Text(
+                text!,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
+    );
+    if (blurSigma <= 0) {
+      return overlay;
+    }
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+      child: overlay,
     );
   }
 }

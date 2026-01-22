@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
 import 'services/sound_service.dart';
+import 'utils/effects_quality.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,9 @@ class StirnratenApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(
+          create: (_) => EffectsController()..startMonitoring(),
+        ),
         Provider(
           create: (context) => SoundService(),
           dispose: (_, service) => service.dispose(),

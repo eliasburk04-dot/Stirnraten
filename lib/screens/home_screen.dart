@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../services/sound_service.dart';
+import '../utils/effects_quality.dart';
+import '../widgets/glass_widgets.dart';
 import 'stirnraten_screen.dart';
 
 const Color _homePrimary = Color(0xFF38BDF8);
@@ -114,11 +116,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     const horizontalPadding = 24.0;
     const verticalPadding = 24.0;
+    final effects = EffectsConfig.of(context);
 
     return Scaffold(
       body: Stack(
         children: [
-          _AnimatedBackground(controller: _bgController),
+          RepaintBoundary(
+            child: _AnimatedBackground(
+              controller: _bgController,
+              effects: effects,
+            ),
+          ),
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -158,10 +166,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   position: _heroSlide,
                                   child: FadeTransition(
                                     opacity: _heroFade,
-                                    child: SizedBox(
-                                      height: heroHeight,
-                                      child: _StartCard(pulse: _pulse),
-                                    ),
+                                      child: SizedBox(
+                                        height: heroHeight,
+                                        child: _StartCard(
+                                          pulse: _pulse,
+                                          effects: effects,
+                                        ),
+                                      ),
                                   ),
                                 ),
                               ],
@@ -277,8 +288,12 @@ class _TopIcon extends StatelessWidget {
 
 class _StartCard extends StatefulWidget {
   final Animation<double> pulse;
+  final EffectsConfig effects;
 
-  const _StartCard({required this.pulse});
+  const _StartCard({
+    required this.pulse,
+    required this.effects,
+  });
 
   @override
   State<_StartCard> createState() => _StartCardState();
@@ -290,6 +305,8 @@ class _StartCardState extends State<_StartCard> {
   @override
   Widget build(BuildContext context) {
     final scale = _hovered ? 1.02 : 1.0;
+    final blurSigma = widget.effects.blur(high: 8, medium: 4, low: 0);
+    final shadowBlur = widget.effects.shadowBlur(high: 20, medium: 14, low: 8);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -298,83 +315,81 @@ class _StartCardState extends State<_StartCard> {
         scale: scale,
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,
-        child: ClipRRect(
+        child: GlassBackdrop(
+          blurSigma: blurSigma,
           borderRadius: BorderRadius.circular(_homeCardRadius),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_homeCardRadius),
-                  border: Border.all(color: _homeBorder),
-                  boxShadow: _hovered
-                      ? [
-                          BoxShadow(
-                            color: _homePrimary.withValues(alpha: 0.18),
-                            blurRadius: 26,
-                            offset: const Offset(0, 12),
-                          ),
-                        ]
-                      : null,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(_homeCardRadius),
+              border: Border.all(color: _homeBorder),
+              boxShadow: _hovered
+                  ? [
+                      BoxShadow(
+                        color: _homePrimary.withValues(alpha: 0.18),
+                        blurRadius: shadowBlur,
+                        offset: const Offset(0, 12),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/images/stirnraten_image.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Image.asset(
-                        'assets/images/stirnraten_image.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.15),
-                              Colors.black.withValues(alpha: 0.55),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 22,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _ModePill(pulse: widget.pulse),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Setz das Handy\nan die Stirn.',
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600,
-                              height: 1.15,
-                              letterSpacing: 0.2,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Das Team erkl\u00e4rt. Du r\u00e4tst.',
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              height: 1.4,
-                              color: Colors.white.withValues(alpha: 0.65),
-                            ),
-                          ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.15),
+                          Colors.black.withValues(alpha: 0.55),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 22,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _ModePill(pulse: widget.pulse),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Setz das Handy\nan die Stirn.',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          height: 1.15,
+                          letterSpacing: 0.2,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Das Team erkl\u00e4rt. Du r\u00e4tst.',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                          color: Colors.white.withValues(alpha: 0.65),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -504,58 +519,77 @@ class _StartButtonState extends State<_StartButton> {
 
 class _AnimatedBackground extends StatelessWidget {
   final AnimationController controller;
+  final EffectsConfig effects;
 
-  const _AnimatedBackground({required this.controller});
+  const _AnimatedBackground({
+    required this.controller,
+    required this.effects,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final blurPrimary = effects.shadowBlur(high: 120, medium: 90, low: 60);
+    final blurSecondary = effects.shadowBlur(high: 140, medium: 100, low: 70);
+    final blurTertiary = effects.shadowBlur(high: 110, medium: 80, low: 50);
+    final spread = effects.shadowBlur(high: 10, medium: 8, low: 4);
+
+    Widget buildStack(double driftX, double driftY) {
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: _homeBackground,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    _homeBackground,
+                    _homeSurface.withValues(alpha: 0.6),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _GlowOrb(
+            size: 260,
+            color: _homePrimary.withValues(alpha: 0.16),
+            offset: Offset(80 + driftX, -120 + driftY),
+            alignment: Alignment.topRight,
+            blurRadius: blurPrimary,
+            spreadRadius: spread,
+          ),
+          _GlowOrb(
+            size: 300,
+            color: const Color(0xFF4ADE80).withValues(alpha: 0.16),
+            offset: Offset(-120 + driftX, 160 + driftY),
+            alignment: Alignment.bottomLeft,
+            blurRadius: blurSecondary,
+            spreadRadius: spread,
+          ),
+          _GlowOrb(
+            size: 220,
+            color: const Color(0xFF60A5FA).withValues(alpha: 0.14),
+            offset: Offset(-80 + driftY, -40 - driftX),
+            alignment: Alignment.topLeft,
+            blurRadius: blurTertiary,
+            spreadRadius: spread,
+          ),
+        ],
+      );
+    }
+
+    if (effects.quality == EffectsQuality.low) {
+      return buildStack(0, 0);
+    }
+
     return AnimatedBuilder(
       animation: controller,
       builder: (context, child) {
         final t = controller.value * pi * 2;
         final driftX = sin(t) * 14;
         final driftY = cos(t) * 12;
-
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _homeBackground,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      _homeBackground,
-                      _homeSurface.withValues(alpha: 0.6),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            _GlowOrb(
-              size: 260,
-              color: _homePrimary.withValues(alpha: 0.16),
-              offset: Offset(80 + driftX, -120 + driftY),
-              alignment: Alignment.topRight,
-              blurRadius: 120,
-            ),
-            _GlowOrb(
-              size: 300,
-              color: const Color(0xFF4ADE80).withValues(alpha: 0.16),
-              offset: Offset(-120 + driftX, 160 + driftY),
-              alignment: Alignment.bottomLeft,
-              blurRadius: 140,
-            ),
-            _GlowOrb(
-              size: 220,
-              color: const Color(0xFF60A5FA).withValues(alpha: 0.14),
-              offset: Offset(-80 + driftY, -40 - driftX),
-              alignment: Alignment.topLeft,
-              blurRadius: 120,
-            ),
-          ],
-        );
+        return buildStack(driftX, driftY);
       },
     );
   }
@@ -567,13 +601,15 @@ class _GlowOrb extends StatelessWidget {
   final Offset offset;
   final Alignment alignment;
   final double blurRadius;
+  final double spreadRadius;
 
   const _GlowOrb({
     required this.size,
     required this.color,
     required this.offset,
     required this.alignment,
-    this.blurRadius = 100,
+    required this.blurRadius,
+    required this.spreadRadius,
   });
 
   @override
@@ -592,7 +628,7 @@ class _GlowOrb extends StatelessWidget {
               BoxShadow(
                 color: color.withValues(alpha: 0.6),
                 blurRadius: blurRadius,
-                spreadRadius: 10,
+                spreadRadius: spreadRadius,
               ),
             ],
           ),

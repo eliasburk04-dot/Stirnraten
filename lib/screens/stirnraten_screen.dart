@@ -1026,8 +1026,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                           textAlign: TextAlign.center,
                           style: GoogleFonts.fredoka(
                             fontSize: 96,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.6,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
                             color: Colors.white,
                             shadows: [
                               Shadow(

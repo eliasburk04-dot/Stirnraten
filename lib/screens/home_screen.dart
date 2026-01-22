@@ -10,12 +10,15 @@ import '../utils/effects_quality.dart';
 import '../widgets/glass_widgets.dart';
 import 'stirnraten_screen.dart';
 
-const Color _homePrimary = Color(0xFF38BDF8);
-const Color _homeBackground = Color(0xFF0B0F1A);
-const Color _homeSurface = Color(0xFF141A26);
-const Color _homeGlass = Color(0x66141A26);
-const Color _homeBorder = Color(0x14FFFFFF);
-const double _homeCardRadius = 24;
+const Color _homePrimary = Color(0xFF21D4EA);
+const Color _homeBackgroundTop = Color(0xFFFFE277);
+const Color _homeBackgroundMid = Color(0xFFFFB866);
+const Color _homeBackgroundBottom = Color(0xFFF25B8F);
+const Color _homeCardSurface = Color(0xB3FFFFFF);
+const Color _homeCardBorder = Color(0x8CFFFFFF);
+const Color _homeText = Color(0xFF1E293B);
+const Color _homeMuted = Color(0xFF3B4A5A);
+const double _homeCardRadius = 48;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -45,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
     _bgController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 16),
+      duration: const Duration(seconds: 18),
     )..repeat(reverse: true);
     _pulseController = AnimationController(
       vsync: this,
@@ -70,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
 
     _heroSlide = Tween<Offset>(
-      begin: const Offset(0, 0.08),
+      begin: const Offset(0, 0.06),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
@@ -79,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
     _ctaSlide = Tween<Offset>(
-      begin: const Offset(0, 0.12),
+      begin: const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
@@ -115,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     const horizontalPadding = 24.0;
-    const verticalPadding = 24.0;
+    const verticalPadding = 16.0;
     final effects = EffectsConfig.of(context);
 
     return Scaffold(
@@ -131,84 +134,92 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final maxWidth = min(constraints.maxWidth, 420.0);
-                final minHeight = max(
-                  0.0,
-                  constraints.maxHeight - (verticalPadding * 2),
-                );
-                final heroHeight = min(
-                  520.0,
-                  max(320.0, constraints.maxHeight * 0.6),
-                );
+                final availableHeight = constraints.maxHeight;
+                final cardHeight =
+                    (availableHeight * 0.5).clamp(320.0, 460.0);
+                final headerSpacing = availableHeight < 700 ? 16.0 : 22.0;
+                final footerSpacing = availableHeight < 700 ? 12.0 : 18.0;
 
                 return Center(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: maxWidth),
-                    child: SingleChildScrollView(
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: horizontalPadding,
                         vertical: verticalPadding,
                       ),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: minHeight),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                FadeTransition(
-                                  opacity: _topFade,
-                                  child: const _TopBar(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FadeTransition(
+                            opacity: _topFade,
+                            child: const _TopBar(),
+                          ),
+                          SizedBox(height: headerSpacing),
+                          SlideTransition(
+                            position: _heroSlide,
+                            child: FadeTransition(
+                              opacity: _heroFade,
+                              child: SizedBox(
+                                height: cardHeight,
+                                child: _StartCard(
+                                  pulse: _pulse,
+                                  floatController: _bgController,
+                                  effects: effects,
                                 ),
-                                const SizedBox(height: 20),
-                                SlideTransition(
-                                  position: _heroSlide,
-                                  child: FadeTransition(
-                                    opacity: _heroFade,
-                                      child: SizedBox(
-                                        height: heroHeight,
-                                        child: _StartCard(
-                                          pulse: _pulse,
-                                          effects: effects,
-                                        ),
-                                      ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(
-                              width: double.infinity,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  SlideTransition(
-                                    position: _ctaSlide,
-                                    child: FadeTransition(
-                                      opacity: _ctaFade,
-                                      child: _StartButton(
-                                        onPressed: _startGame,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  FadeTransition(
-                                    opacity: _tipFade,
-                                    child: Text(
-                                      'Tipp: Kippen fÃ¼r richtig, zurÃ¼ck fÃ¼r passen.',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.spaceGrotesk(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.white.withValues(alpha: 0.45),
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const Spacer(),
+                          SlideTransition(
+                            position: _ctaSlide,
+                            child: FadeTransition(
+                              opacity: _ctaFade,
+                              child: _StartButton(
+                                onPressed: _startGame,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: footerSpacing),
+                          FadeTransition(
+                            opacity: _tipFade,
+                            child: Text.rich(
+                              TextSpan(
+                                text: 'Tipp: Kippen für ',
+                                style: GoogleFonts.nunito(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _homeText.withValues(alpha: 0.65),
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'richtig',
+                                    style: GoogleFonts.nunito(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF22C55E),
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ', zurück für ',
+                                    style: GoogleFonts.nunito(
+                                      fontWeight: FontWeight.w600,
+                                      color: _homeText.withValues(alpha: 0.65),
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: 'passen',
+                                    style: GoogleFonts.nunito(
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                  const TextSpan(text: '.'),
+                                ],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -235,26 +246,27 @@ class _TopBar extends StatelessWidget {
             children: [
               Text(
                 'Stirnraten',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                  color: Colors.white,
+                style: GoogleFonts.fredoka(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: _homeText,
+                  letterSpacing: 0.2,
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
-                'Party Game',
-                style: GoogleFonts.spaceGrotesk(
+                'PARTY GAME',
+                style: GoogleFonts.nunito(
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.3,
-                  color: Colors.white.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.6,
+                  color: _homeText.withValues(alpha: 0.6),
                 ),
               ),
             ],
           ),
         ),
-        const _TopIcon(icon: Icons.person),
+        const _TopIcon(icon: Icons.person_rounded),
       ],
     );
   }
@@ -267,130 +279,217 @@ class _TopIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: _homeGlass,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
+    final effects = EffectsConfig.of(context);
+    final blurSigma = effects.blur(high: 18, medium: 12, low: 0);
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.55),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-      ),
-      child: Icon(
-        icon,
-        size: 20,
-        color: Colors.white.withValues(alpha: 0.85),
+        child: Icon(
+          icon,
+          size: 22,
+          color: _homeText.withValues(alpha: 0.8),
+        ),
       ),
     );
   }
 }
 
-class _StartCard extends StatefulWidget {
+class _StartCard extends StatelessWidget {
   final Animation<double> pulse;
+  final Animation<double> floatController;
   final EffectsConfig effects;
 
   const _StartCard({
     required this.pulse,
+    required this.floatController,
     required this.effects,
   });
 
   @override
-  State<_StartCard> createState() => _StartCardState();
-}
-
-class _StartCardState extends State<_StartCard> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final scale = _hovered ? 1.02 : 1.0;
-    final blurSigma = widget.effects.blur(high: 8, medium: 4, low: 0);
-    final shadowBlur = widget.effects.shadowBlur(high: 20, medium: 14, low: 8);
+    final blurSigma = effects.blur(high: 20, medium: 16, low: 0);
+    final shadowBlur = effects.shadowBlur(high: 26, medium: 20, low: 12);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedScale(
-        scale: scale,
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        child: GlassBackdrop(
-          blurSigma: blurSigma,
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      borderRadius: BorderRadius.circular(_homeCardRadius),
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_homeCardRadius),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(_homeCardRadius),
-              border: Border.all(color: _homeBorder),
-              boxShadow: _hovered
-                  ? [
-                      BoxShadow(
-                        color: _homePrimary.withValues(alpha: 0.18),
-                        blurRadius: shadowBlur,
-                        offset: const Offset(0, 12),
-                      ),
-                    ]
-                  : null,
+          color: _homeCardSurface,
+          border: Border.all(color: _homeCardBorder, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: shadowBlur,
+              offset: const Offset(0, 14),
             ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Image.asset(
-                    'assets/images/stirnraten_image.png',
-                    fit: BoxFit.cover,
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.35),
+                      Colors.white.withValues(alpha: 0.15),
+                    ],
                   ),
                 ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.15),
-                          Colors.black.withValues(alpha: 0.55),
-                        ],
-                      ),
-                    ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(_homeCardRadius),
+                  ),
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFFA83A),
+                      Color(0xFFF25B8F),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 22,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: _ModePill(pulse: pulse),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 18),
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
-                      _ModePill(pulse: widget.pulse),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Setz das Handy\nan die Stirn.',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
-                          height: 1.15,
-                          letterSpacing: 0.2,
-                          color: Colors.white,
+                      Container(
+                        width: 96,
+                        height: 96,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0xFFFFD34A),
+                              Color(0xFFFF9E2C),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.smartphone_rounded,
+                          color: Colors.white.withValues(alpha: 0.95),
+                          size: 42,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Das Team erkl\u00e4rt. Du r\u00e4tst.',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
-                          color: Colors.white.withValues(alpha: 0.65),
+                      Positioned(
+                        top: -6,
+                        right: -6,
+                        child: _SmileyBadge(
+                          floatController: floatController,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 22),
+                  Text(
+                    'Setz das Handy\nan die Stirn.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.fredoka(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                      color: _homeText,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Das Team erklärt.\nDu rätst.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.nunito(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                      color: _homeMuted,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmileyBadge extends StatelessWidget {
+  final Animation<double> floatController;
+
+  const _SmileyBadge({required this.floatController});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: floatController,
+      builder: (context, child) {
+        final t = floatController.value * pi * 2;
+        final drift = sin(t) * 3;
+        return Transform.translate(
+          offset: Offset(0, drift),
+          child: child,
+        );
+      },
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFC1D9),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF25B8F).withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Icon(
+          Icons.sentiment_satisfied_rounded,
+          size: 16,
+          color: const Color(0xFFE11D74),
         ),
       ),
     );
@@ -405,39 +504,67 @@ class _ModePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: _homeSurface.withValues(alpha: 0.65),
+        color: Colors.white.withValues(alpha: 0.78),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedBuilder(
-            animation: pulse,
-            builder: (context, child) {
-              final t = Curves.easeInOut.transform(pulse.value);
-              final size = lerpDouble(6, 8, t)!;
-              final opacity = lerpDouble(0.6, 1.0, t)!;
-              return Container(
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4ADE80).withValues(alpha: opacity),
-                  shape: BoxShape.circle,
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: pulse,
+                  builder: (context, child) {
+                    final t = Curves.easeInOut.transform(pulse.value);
+                    final scale = lerpDouble(1.0, 1.8, t)!;
+                    final opacity = lerpDouble(0.25, 0.0, t)!;
+                    return Transform.scale(
+                      scale: scale,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              const Color(0xFF22C55E).withValues(alpha: opacity),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF22C55E),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 8),
           Text(
-            'Party Modus',
-            style: GoogleFonts.spaceGrotesk(
+            'PARTY MODUS',
+            style: GoogleFonts.nunito(
               fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.6,
-              color: Colors.white.withValues(alpha: 0.85),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+              color: _homeText,
             ),
           ),
         ],
@@ -476,14 +603,14 @@ class _StartButtonState extends State<_StartButton> {
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         child: Container(
-          height: 56,
+          height: 64,
           decoration: BoxDecoration(
             color: _homePrimary,
             borderRadius: BorderRadius.circular(999),
             boxShadow: [
               BoxShadow(
-                color: _homePrimary.withValues(alpha: 0.35),
-                blurRadius: 24,
+                color: _homePrimary.withValues(alpha: 0.4),
+                blurRadius: 26,
                 offset: const Offset(0, 12),
               ),
             ],
@@ -494,19 +621,27 @@ class _StartButtonState extends State<_StartButton> {
               Text(
                 'Runde starten',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 16,
+                style: GoogleFonts.fredoka(
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                  color: _homeBackground,
+                  color: _homeText,
+                  letterSpacing: 0.2,
                 ),
               ),
               Positioned(
-                right: 18,
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: _homeBackground,
-                  size: 22,
+                right: 10,
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                  ),
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: _homeText,
+                    size: 24,
+                  ),
                 ),
               ),
             ],
@@ -528,9 +663,9 @@ class _AnimatedBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blurPrimary = effects.shadowBlur(high: 120, medium: 90, low: 60);
-    final blurSecondary = effects.shadowBlur(high: 140, medium: 100, low: 70);
-    final blurTertiary = effects.shadowBlur(high: 110, medium: 80, low: 50);
+    final blurPrimary = effects.shadowBlur(high: 140, medium: 110, low: 70);
+    final blurSecondary = effects.shadowBlur(high: 160, medium: 120, low: 80);
+    final blurTertiary = effects.shadowBlur(high: 120, medium: 90, low: 60);
     final spread = effects.shadowBlur(high: 10, medium: 8, low: 4);
 
     Widget buildStack(double driftX, double driftY) {
@@ -538,42 +673,102 @@ class _AnimatedBackground extends StatelessWidget {
         children: [
           Positioned.fill(
             child: Container(
-              decoration: BoxDecoration(
-                color: _homeBackground,
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    _homeBackground,
-                    _homeSurface.withValues(alpha: 0.6),
+                    _homeBackgroundTop,
+                    _homeBackgroundMid,
+                    _homeBackgroundBottom,
                   ],
                 ),
               ),
             ),
           ),
           _GlowOrb(
-            size: 260,
-            color: _homePrimary.withValues(alpha: 0.16),
-            offset: Offset(80 + driftX, -120 + driftY),
+            size: 300,
+            color: const Color(0xFFFFF1A6).withValues(alpha: 0.35),
+            offset: Offset(100 + driftX, -140 + driftY),
             alignment: Alignment.topRight,
             blurRadius: blurPrimary,
             spreadRadius: spread,
           ),
           _GlowOrb(
-            size: 300,
-            color: const Color(0xFF4ADE80).withValues(alpha: 0.16),
-            offset: Offset(-120 + driftX, 160 + driftY),
-            alignment: Alignment.bottomLeft,
+            size: 340,
+            color: const Color(0xFFFF9FCE).withValues(alpha: 0.28),
+            offset: Offset(-140 + driftX, 160 + driftY),
+            alignment: Alignment.centerLeft,
             blurRadius: blurSecondary,
             spreadRadius: spread,
           ),
           _GlowOrb(
-            size: 220,
-            color: const Color(0xFF60A5FA).withValues(alpha: 0.14),
-            offset: Offset(-80 + driftY, -40 - driftX),
-            alignment: Alignment.topLeft,
+            size: 240,
+            color: const Color(0xFF7DD3FC).withValues(alpha: 0.22),
+            offset: Offset(60 + driftY, 220 - driftX),
+            alignment: Alignment.bottomRight,
             blurRadius: blurTertiary,
             spreadRadius: spread,
+          ),
+          _DecorIcon(
+            controller: controller,
+            icon: Icons.music_note_rounded,
+            size: 24,
+            color: Colors.white.withValues(alpha: 0.55),
+            alignment: Alignment.topLeft,
+            offset: const Offset(16, 120),
+            phase: 0.2,
+          ),
+          _DecorIcon(
+            controller: controller,
+            icon: Icons.star_rounded,
+            size: 22,
+            color: Colors.white.withValues(alpha: 0.45),
+            alignment: Alignment.centerRight,
+            offset: const Offset(-28, -20),
+            phase: 1.4,
+          ),
+          _DecorIcon(
+            controller: controller,
+            icon: Icons.bolt_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: 0.35),
+            alignment: Alignment.centerLeft,
+            offset: const Offset(10, 120),
+            phase: 2.1,
+          ),
+          _DecorIcon(
+            controller: controller,
+            icon: Icons.change_history_rounded,
+            size: 18,
+            color: const Color(0xFF34D399).withValues(alpha: 0.6),
+            alignment: Alignment.topCenter,
+            offset: const Offset(0, 80),
+            phase: 0.8,
+          ),
+          _DecorDot(
+            controller: controller,
+            size: 12,
+            color: const Color(0xFF60A5FA).withValues(alpha: 0.65),
+            alignment: Alignment.bottomLeft,
+            offset: const Offset(40, -120),
+            phase: 2.6,
+          ),
+          _DecorDot(
+            controller: controller,
+            size: 14,
+            color: const Color(0xFFFBBF24).withValues(alpha: 0.7),
+            alignment: Alignment.centerRight,
+            offset: const Offset(-90, 40),
+            phase: 1.8,
+          ),
+          _DecorDiamond(
+            controller: controller,
+            size: 16,
+            color: const Color(0xFFF472B6).withValues(alpha: 0.6),
+            alignment: Alignment.topLeft,
+            offset: const Offset(90, 180),
+            phase: 1.1,
           ),
         ],
       );
@@ -587,8 +782,8 @@ class _AnimatedBackground extends StatelessWidget {
       animation: controller,
       builder: (context, child) {
         final t = controller.value * pi * 2;
-        final driftX = sin(t) * 14;
-        final driftY = cos(t) * 12;
+        final driftX = sin(t) * 12;
+        final driftY = cos(t) * 10;
         return buildStack(driftX, driftY);
       },
     );
@@ -631,6 +826,136 @@ class _GlowOrb extends StatelessWidget {
                 spreadRadius: spreadRadius,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DecorIcon extends StatelessWidget {
+  final Animation<double> controller;
+  final IconData icon;
+  final double size;
+  final Color color;
+  final Alignment alignment;
+  final Offset offset;
+  final double phase;
+
+  const _DecorIcon({
+    required this.controller,
+    required this.icon,
+    required this.size,
+    required this.color,
+    required this.alignment,
+    required this.offset,
+    required this.phase,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, child) {
+          final t = controller.value * pi * 2 + phase;
+          final drift = Offset(sin(t) * 6, cos(t) * 6);
+          return Transform.translate(
+            offset: offset + drift,
+            child: child,
+          );
+        },
+        child: Icon(icon, size: size, color: color),
+      ),
+    );
+  }
+}
+
+class _DecorDot extends StatelessWidget {
+  final Animation<double> controller;
+  final double size;
+  final Color color;
+  final Alignment alignment;
+  final Offset offset;
+  final double phase;
+
+  const _DecorDot({
+    required this.controller,
+    required this.size,
+    required this.color,
+    required this.alignment,
+    required this.offset,
+    required this.phase,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, child) {
+          final t = controller.value * pi * 2 + phase;
+          final drift = Offset(sin(t) * 5, cos(t) * 5);
+          return Transform.translate(
+            offset: offset + drift,
+            child: child,
+          );
+        },
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DecorDiamond extends StatelessWidget {
+  final Animation<double> controller;
+  final double size;
+  final Color color;
+  final Alignment alignment;
+  final Offset offset;
+  final double phase;
+
+  const _DecorDiamond({
+    required this.controller,
+    required this.size,
+    required this.color,
+    required this.alignment,
+    required this.offset,
+    required this.phase,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, child) {
+          final t = controller.value * pi * 2 + phase;
+          final drift = Offset(sin(t) * 4, cos(t) * 4);
+          return Transform.translate(
+            offset: offset + drift,
+            child: child,
+          );
+        },
+        child: Transform.rotate(
+          angle: pi / 4,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
         ),
       ),

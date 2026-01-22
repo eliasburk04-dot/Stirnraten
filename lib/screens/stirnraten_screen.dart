@@ -1469,7 +1469,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                     ),
                     const SizedBox(height: 12),
                     _ResultActionButton(
-                      label: 'Zur?ck zum Hauptmen?',
+                      label: 'Zurück zum Hauptmenü',
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
                       textColor: Colors.white,
                       borderColor: Colors.white.withValues(alpha: 0.3),
@@ -1730,7 +1730,7 @@ class _ResultSummaryItem extends StatelessWidget {
     final backgroundOpacity = isCorrect ? 0.4 : 0.2;
     final textColor =
         isCorrect ? Colors.white : Colors.white.withValues(alpha: 0.6);
-    final iconColor = isCorrect ? _resultPrimary : const Color(0xFFF87171);
+    final iconBackground = isCorrect ? const Color(0xFF16A34A) : const Color(0xFFEF4444);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -1753,15 +1753,23 @@ class _ResultSummaryItem extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(4),
-            decoration: const BoxDecoration(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: iconBackground,
+              boxShadow: [
+                BoxShadow(
+                  color: iconBackground.withValues(alpha: 0.5),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Icon(
-              isCorrect ? Icons.check : Icons.close,
-              size: 16,
-              color: iconColor,
+              isCorrect ? Icons.check_rounded : Icons.close_rounded,
+              size: 18,
+              color: Colors.white,
             ),
           ),
         ],

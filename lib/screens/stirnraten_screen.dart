@@ -25,38 +25,11 @@ const Color _categoryGlass = Color(0xB3FFFFFF);
 const Color _categoryBorder = Color(0x8CFFFFFF);
 const Color _categoryText = Color(0xFF1E293B);
 const Color _categoryMuted = Color(0xFF3B4A5A);
-const Color _categoryModeGlass = Color(0x66141A26);
 const double _categoryCardRadius = 44;
 const Color _resultGradientTop = Color(0xFFFFD600);
 const Color _resultGradientBottom = Color(0xFFFF3B8E);
 const Color _resultPrimary = Color(0xFF0DF246);
 const Color _resultPink = Color(0xFFFF3B8E);
-
-String _gameModeLabel(GameMode mode) {
-  switch (mode) {
-    case GameMode.classic:
-      return 'Klassisch';
-    case GameMode.suddenDeath:
-      return 'Sudden Death';
-    case GameMode.hardcore:
-      return 'Hardcore';
-    case GameMode.drinking:
-      return 'Trinkspiel';
-  }
-}
-
-Color _gameModeAccent(GameMode mode) {
-  switch (mode) {
-    case GameMode.classic:
-      return _categoryPrimary;
-    case GameMode.suddenDeath:
-      return const Color(0xFFEF4444);
-    case GameMode.hardcore:
-      return const Color(0xFF06B6D4);
-    case GameMode.drinking:
-      return const Color(0xFF4ADE80);
-  }
-}
 
 const double _tiltNeutralZoneDeg = 10;
 const double _tiltTriggerDeg = 25;
@@ -1112,7 +1085,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
   Widget _buildGame() {
     final effects = EffectsConfig.of(context);
-    final timerBlur = effects.blur(high: 6, medium: 4, low: 0);
+    final chipBlur = effects.blur(high: 8, medium: 6, low: 0);
+    final word = _snapshot.currentWord.toUpperCase();
     return Stack(
       children: [
         Container(
@@ -1121,17 +1095,32 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Color(0xFF1E293B),
-                Color(0xFF0F172A),
+                Color(0xFFFFD600),
+                Color(0xFFFF2D55),
               ],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
         ),
-        
+        const Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  colors: [
+                    Color(0x33FFFFFF),
+                    Color(0x00FFFFFF),
+                  ],
+                  radius: 0.75,
+                  center: Alignment(0.0, -0.2),
+                ),
+              ),
+            ),
+          ),
+        ),
         if (!_showFallbackButtons)
-          // Touch controls - Links überspringen, Rechts richtig
+          // Touch controls - Links ?berspringen, Rechts richtig
           Row(
             children: [
               Expanded(
@@ -1154,87 +1143,60 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
               ),
             ],
           ),
-
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Text(
-              _snapshot.currentWord,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 60,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-
-        Positioned(
-          top: 40,
-          right: 28,
-          child: RepaintBoundary(
-            child: GlassBackdrop(
-              blurSigma: timerBlur,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(20),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withAlpha(40),
-                    width: 1.5,
-                  ),
-                ),
-                child: Text(
-                  '${_snapshot.timeLeft}',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
+        SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _HudChip(
+                      value: _formatTime(_snapshot.timeLeft),
+                      blurSigma: chipBlur,
+                    ),
+                    _HudChip(
+                      label: 'SCORE',
+                      value: '${_snapshot.score}',
+                      alignEnd: true,
+                      blurSigma: chipBlur,
+                    ),
+                  ],
                 ),
               ),
-            ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          word,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 96,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -2.0,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 22,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-
-        Positioned(
-          top: 40,
-          left: 28,
-          child: _ModeBadge(mode: _snapshot.activeMode),
-        ),
-
-        if (kIsWeb && _webTiltEnabled)
-          const Positioned(
-            top: 96,
-            right: 28,
-            child: _TiltStatusBadge(),
-          ),
-
-        Positioned(
-          bottom: 40,
-          left: 0,
-          right: 0,
-          child: Text(
-            kIsWeb
-                ? 'Tippen zum Antworten'
-                : (_showFallbackButtons
-                    ? 'Sensor nicht verfuegbar'
-                    : 'Kippen zum Antworten'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0x80FFFFFF),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ),
-
         if (kDebugMode && kIsWeb)
           Positioned(
             left: 16,
@@ -1246,8 +1208,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'tilt ${_webTiltPermissionGranted ? 'granted' : (_webTiltPermissionDenied ? 'denied' : 'unknown')}\n'
-                'enabled ${_webTiltEnabled ? 'yes' : 'no'}',
+                "tilt ${_webTiltPermissionGranted ? 'granted' : (_webTiltPermissionDenied ? 'denied' : 'unknown')}\n"
+                "enabled ${_webTiltEnabled ? 'yes' : 'no'}",
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 10,
@@ -1256,7 +1218,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
               ),
             ),
           ),
-
         if (kDebugMode && !kIsWeb)
           Positioned(
             left: 16,
@@ -1268,8 +1229,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'pitch ${_lastPitchDeg.toStringAsFixed(1)} deg\\n'
-                'state ${_tiltDetector.phase}',
+                "pitch ${_lastPitchDeg.toStringAsFixed(1)} deg\n"
+                "state ${_tiltDetector.phase}",
                 style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 10,
@@ -1279,7 +1240,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ),
           ),
 
-        // Feedback Overlay - MUSS ZULETZT IM STACK SEIN für höchste Z-Order
+        // Feedback Overlay - MUSS ZULETZT IM STACK SEIN f?r h?chste Z-Order
         if (_feedbackColor != null)
           Positioned.fill(
             child: IgnorePointer(
@@ -1308,6 +1269,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           ),
       ],
     );
+  }
+
+  String _formatTime(int totalSeconds) {
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Widget _buildResult() {
@@ -1537,6 +1504,67 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HudChip extends StatelessWidget {
+  final String? label;
+  final String value;
+  final bool alignEnd;
+  final double blurSigma;
+
+  const _HudChip({
+    required this.value,
+    required this.blurSigma,
+    this.label,
+    this.alignEnd = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textAlign = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.25),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: textAlign,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (label != null)
+                Text(
+                  label!,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+              Text(
+                value,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: label == null ? 16 : 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2313,90 +2341,6 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeBadge extends StatelessWidget {
-  final GameMode mode;
-
-  const _ModeBadge({required this.mode});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = _gameModeAccent(mode);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: _categoryModeGlass,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.45),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: 0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: accent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _gameModeLabel(mode),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TiltStatusBadge extends StatelessWidget {
-  const _TiltStatusBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Text(
-        'Tilt: an',
-        style: GoogleFonts.nunito(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
-          color: _categoryText,
         ),
       ),
     );

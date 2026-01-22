@@ -26,7 +26,7 @@ class GlassBackdrop extends StatelessWidget {
           );
     return ClipRRect(
       borderRadius: borderRadius,
-      child: content,
+      child: RepaintBoundary(child: content),
     );
   }
 }

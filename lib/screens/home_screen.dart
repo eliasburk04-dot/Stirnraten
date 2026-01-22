@@ -120,6 +120,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     const horizontalPadding = 24.0;
     const verticalPadding = 16.0;
     final effects = EffectsConfig.of(context);
+    final enableMotion =
+        effects.quality == EffectsQuality.high && !effects.reduceMotion;
 
     return Scaffold(
       body: Stack(
@@ -128,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: _AnimatedBackground(
               controller: _bgController,
               effects: effects,
+              enableMotion: enableMotion,
             ),
           ),
           SafeArea(
@@ -166,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   pulse: _pulse,
                                   floatController: _bgController,
                                   effects: effects,
+                                  enableMotion: enableMotion,
                                 ),
                               ),
                             ),
@@ -316,11 +320,13 @@ class _StartCard extends StatelessWidget {
   final Animation<double> pulse;
   final Animation<double> floatController;
   final EffectsConfig effects;
+  final bool enableMotion;
 
   const _StartCard({
     required this.pulse,
     required this.floatController,
     required this.effects,
+    required this.enableMotion,
   });
 
   @override
@@ -387,7 +393,10 @@ class _StartCard extends StatelessWidget {
                 children: [
                   Align(
                     alignment: Alignment.topCenter,
-                    child: _ModePill(pulse: pulse),
+                    child: _ModePill(
+                      pulse: pulse,
+                      enableMotion: enableMotion,
+                    ),
                   ),
                   const SizedBox(height: 18),
                   Stack(
@@ -418,6 +427,7 @@ class _StartCard extends StatelessWidget {
                         right: -6,
                         child: _SmileyBadge(
                           floatController: floatController,
+                          enableMotion: enableMotion,
                         ),
                       ),
                     ],
@@ -456,11 +466,41 @@ class _StartCard extends StatelessWidget {
 
 class _SmileyBadge extends StatelessWidget {
   final Animation<double> floatController;
+  final bool enableMotion;
 
-  const _SmileyBadge({required this.floatController});
+  const _SmileyBadge({
+    required this.floatController,
+    required this.enableMotion,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final badge = Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFC1D9),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF25B8F).withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.sentiment_satisfied_rounded,
+        size: 16,
+        color: const Color(0xFFE11D74),
+      ),
+    );
+
+    if (!enableMotion) {
+      return badge;
+    }
+
     return AnimatedBuilder(
       animation: floatController,
       builder: (context, child) {
@@ -471,35 +511,19 @@ class _SmileyBadge extends StatelessWidget {
           child: child,
         );
       },
-      child: Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFC1D9),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFF25B8F).withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.sentiment_satisfied_rounded,
-          size: 16,
-          color: const Color(0xFFE11D74),
-        ),
-      ),
+      child: badge,
     );
   }
 }
 
 class _ModePill extends StatelessWidget {
   final Animation<double> pulse;
+  final bool enableMotion;
 
-  const _ModePill({required this.pulse});
+  const _ModePill({
+    required this.pulse,
+    required this.enableMotion,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -526,26 +550,27 @@ class _ModePill extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                AnimatedBuilder(
-                  animation: pulse,
-                  builder: (context, child) {
-                    final t = Curves.easeInOut.transform(pulse.value);
-                    final scale = lerpDouble(1.0, 1.8, t)!;
-                    final opacity = lerpDouble(0.25, 0.0, t)!;
-                    return Transform.scale(
-                      scale: scale,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color:
-                              const Color(0xFF22C55E).withValues(alpha: opacity),
+                if (enableMotion)
+                  AnimatedBuilder(
+                    animation: pulse,
+                    builder: (context, child) {
+                      final t = Curves.easeInOut.transform(pulse.value);
+                      final scale = lerpDouble(1.0, 1.8, t)!;
+                      final opacity = lerpDouble(0.25, 0.0, t)!;
+                      return Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF22C55E)
+                                .withValues(alpha: opacity),
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 Container(
                   width: 8,
                   height: 8,
@@ -655,10 +680,12 @@ class _StartButtonState extends State<_StartButton> {
 class _AnimatedBackground extends StatelessWidget {
   final AnimationController controller;
   final EffectsConfig effects;
+  final bool enableMotion;
 
   const _AnimatedBackground({
     required this.controller,
     required this.effects,
+    required this.enableMotion,
   });
 
   @override
@@ -774,7 +801,7 @@ class _AnimatedBackground extends StatelessWidget {
       );
     }
 
-    if (effects.quality == EffectsQuality.low) {
+    if (!enableMotion) {
       return buildStack(0, 0);
     }
 

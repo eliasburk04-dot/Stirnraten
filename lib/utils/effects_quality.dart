@@ -11,6 +11,8 @@ class EffectsController extends ChangeNotifier {
   int _windowFrames = 0;
   int _slowFrames = 0;
   Duration _maxFrame = Duration.zero;
+  static const int _sampleWindow = 30;
+  static const Duration _slowFrameThreshold = Duration(milliseconds: 18);
 
   EffectsQuality get quality => _quality;
 
@@ -24,7 +26,7 @@ class EffectsController extends ChangeNotifier {
     for (final timing in timings) {
       final total = timing.totalSpan;
       _windowFrames++;
-      if (total > const Duration(milliseconds: 20)) {
+      if (total > _slowFrameThreshold) {
         _slowFrames++;
       }
       if (total > _maxFrame) {
@@ -32,15 +34,15 @@ class EffectsController extends ChangeNotifier {
       }
     }
 
-    if (_windowFrames < 60) return;
+    if (_windowFrames < _sampleWindow) return;
 
     final slowRatio = _slowFrames / _windowFrames;
     var next = _quality;
-    if (slowRatio > 0.35) {
+    if (slowRatio > 0.28) {
       next = EffectsQuality.low;
-    } else if (slowRatio > 0.18) {
+    } else if (slowRatio > 0.12) {
       next = EffectsQuality.medium;
-    } else if (slowRatio < 0.05) {
+    } else if (slowRatio < 0.04) {
       next = EffectsQuality.high;
     }
 
@@ -92,7 +94,7 @@ class EffectsConfig {
       case EffectsQuality.high:
         return high;
       case EffectsQuality.medium:
-        return medium ?? (high * 0.66);
+        return medium ?? (high * 0.5);
       case EffectsQuality.low:
         return low;
     }
@@ -107,7 +109,7 @@ class EffectsConfig {
       case EffectsQuality.high:
         return high;
       case EffectsQuality.medium:
-        return medium ?? (high * 0.7);
+        return medium ?? (high * 0.55);
       case EffectsQuality.low:
         return low;
     }
@@ -122,7 +124,7 @@ class EffectsConfig {
       case EffectsQuality.high:
         return high;
       case EffectsQuality.medium:
-        return medium ?? (high * 0.7);
+        return medium ?? (high * 0.6);
       case EffectsQuality.low:
         return low;
     }

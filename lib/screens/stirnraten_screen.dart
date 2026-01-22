@@ -1503,7 +1503,7 @@ class _CategoryCardState extends State<_CategoryCard> {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 12, low: 0);
+    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
     final glowBlur = effects.shadowBlur(high: 26, medium: 20, low: 12);
     final accent = widget.data.accentColor ?? _categoryPrimary;
     final glowAlpha = effects.shadowAlpha(
@@ -2078,7 +2078,7 @@ class _SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 12, low: 0);
+    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
     final shadowBlur = effects.shadowBlur(high: 22, medium: 16, low: 10);
     const timeOptions = [
       _SegmentedOption<int>(value: 30, label: '30s'),
@@ -2238,7 +2238,7 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final showShadow = overlapsContent || shrinkOffset > 0;
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 12, low: 0);
+    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
     final shadowBlur = effects.shadowBlur(high: 18, medium: 14, low: 10);
     final header = Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),

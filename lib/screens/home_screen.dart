@@ -189,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             opacity: _tipFade,
                             child: Text.rich(
                               TextSpan(
-                                text: 'Tipp: Kippen für ',
+                                text: 'Tipp: Kippen fÃ¼r ',
                                 style: GoogleFonts.nunito(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -204,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                   ),
                                   TextSpan(
-                                    text: ', zurück für ',
+                                    text: ', zurÃ¼ck fÃ¼r ',
                                     style: GoogleFonts.nunito(
                                       fontWeight: FontWeight.w600,
                                       color: _homeText.withValues(alpha: 0.65),
@@ -445,7 +445,7 @@ class _StartCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Das Team erklärt.\nDu rätst.',
+                    'Das Team erklÃ¤rt.\nDu rÃ¤tst.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.nunito(
                       fontSize: 14,
@@ -988,4 +988,4 @@ class _DecorDiamond extends StatelessWidget {
       ),
     );
   }
-}
+}

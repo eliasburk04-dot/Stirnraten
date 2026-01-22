@@ -7,7 +7,9 @@ List<double> getWebAccelerometerData() => impl.getWebAccelerometerData();
 
 bool getWebSensorAvailable() => impl.getWebSensorAvailable();
 
-void startWebTiltDetection(Function correctCallback, Function passCallback) => 
+bool isTiltPermissionRequired() => impl.isTiltPermissionRequired();
+
+void startWebTiltDetection(Function correctCallback, Function passCallback) =>
     impl.startWebTiltDetection(correctCallback, passCallback);
 
 void stopWebTiltDetection() => impl.stopWebTiltDetection();

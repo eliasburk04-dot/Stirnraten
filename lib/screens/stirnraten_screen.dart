@@ -9,7 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
-import '../services/category_service.dart';
+import '../services/custom_word_storage.dart';
+import 'custom_words_screen.dart';
 import '../engine/stirnraten_engine.dart';
 import '../utils/sensor_helper.dart';
 import '../utils/effects_quality.dart';
@@ -198,7 +199,7 @@ class StirnratenScreen extends StatefulWidget {
 }
 
 class _StirnratenScreenState extends State<StirnratenScreen> {
-  final CategoryService _categoryService = CategoryService();
+  final CustomWordStorage _customWordStorage = CustomWordStorage();
   final StirnratenEngine _engine = StirnratenEngine();
   final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   bool _showSettingsPanel = false;
@@ -222,6 +223,10 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   bool _receivedSensorEvent = false;
   Timer? _sensorAvailabilityTimer;
   double _lastPitchDeg = 0.0;
+  bool _webTiltPermissionRequired = false;
+  bool _webTiltPermissionGranted = false;
+  bool _webTiltEnabled = false;
+  bool _webTiltPermissionDenied = false;
   
   // Feedback
   Color? _feedbackColor;
@@ -231,8 +236,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   late final FocusNode _searchFocusNode;
   String _searchQuery = '';
   List<_CategoryCardData> _categoryItems = [];
-  List<CustomCategory> _customCategories = [];
-  final Set<String> _selectedCustomCategoryIds = <String>{};
+  List<CustomWordList> _customWordLists = [];
 
   GameSnapshot get _snapshot => _engine.snapshot;
 
@@ -247,7 +251,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
         }
       });
     _categoryItems = _buildCategoryItems();
-    _loadCustomCategories();
+    _loadCustomWordLists();
+    if (kIsWeb) {
+      _webTiltPermissionRequired = isTiltPermissionRequired();
+      _webTiltPermissionGranted = !_webTiltPermissionRequired;
+    }
   }
 
   @override
@@ -472,8 +480,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     context.read<SoundService>().unlock();
 
     // Request sensor permission (iOS/Android only)
-    _sensorPermissionGranted =
-        kIsWeb ? true : await requestSensorPermission();
+    if (kIsWeb) {
+      _webTiltEnabled = false;
+      _webTiltPermissionDenied = false;
+    } else {
+      _sensorPermissionGranted = await requestSensorPermission();
+    }
 
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
@@ -506,6 +518,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       _engine.startGame();
       _feedbackColor = null; // Reset any lingering feedback
       _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
+      if (kIsWeb) {
+        _webTiltEnabled = _webTiltPermissionGranted;
+      }
     });
     if (_snapshot.state == StirnratenGameState.result) {
       _endGame();
@@ -562,8 +577,10 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
     
     if (kIsWeb) {
-      if (kDebugMode) {
-        debugPrint('🌐 Web tilt disabled (tap left/right instead)');
+      if (_webTiltPermissionGranted) {
+        startWebTiltDetection(_handleCorrect, _handlePass);
+      } else if (kDebugMode) {
+        debugPrint('🌐 Web tilt awaiting permission');
       }
       return;
     }
@@ -587,6 +604,19 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     if (kDebugMode) {
       debugPrint('✅ Sensor listeners activated');
     }
+  }
+
+  Future<void> _enableWebTilt() async {
+    final granted = await requestSensorPermission();
+    if (!mounted) return;
+    if (granted && _snapshot.state == StirnratenGameState.playing) {
+      startWebTiltDetection(_handleCorrect, _handlePass);
+    }
+    setState(() {
+      _webTiltPermissionGranted = granted;
+      _webTiltPermissionDenied = !granted;
+      _webTiltEnabled = granted;
+    });
   }
 
   void _processSensorData(double x, double y, double z) {
@@ -862,6 +892,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
     setState(() {
       _engine.endGame();
+      _webTiltEnabled = false;
     });
   }
 
@@ -1246,6 +1277,41 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           left: 28,
           child: _ModeBadge(mode: _snapshot.activeMode),
         ),
+
+        if (kIsWeb && _webTiltEnabled)
+          const Positioned(
+            top: 96,
+            right: 28,
+            child: _TiltStatusBadge(),
+          ),
+
+        if (kIsWeb && !_webTiltPermissionGranted && _webTiltPermissionRequired)
+          Positioned(
+            bottom: 92,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                _TiltEnableButton(
+                  onTap: _enableWebTilt,
+                ),
+                if (_webTiltPermissionDenied)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Tilt nicht verf\u00fcgbar',
+                      style: TextStyle(
+                        color: Color(0x80FFFFFF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
+            ),
+          ),
 
         Positioned(
           bottom: 40,
@@ -1995,6 +2061,99 @@ class _ModeBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TiltStatusBadge extends StatelessWidget {
+  const _TiltStatusBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Text(
+        'Tilt: an',
+        style: GoogleFonts.nunito(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+          color: _categoryText,
+        ),
+      ),
+    );
+  }
+}
+
+class _TiltEnableButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _TiltEnableButton({required this.onTap});
+
+  @override
+  State<_TiltEnableButton> createState() => _TiltEnableButtonState();
+}
+
+class _TiltEnableButtonState extends State<_TiltEnableButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) {
+      setState(() => _pressed = value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              'Tilt aktivieren',
+              style: GoogleFonts.fredoka(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _categoryText,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -9,6 +9,9 @@ JSFunction? _passCallbackRef;
 @JS('requestDeviceMotionPermission')
 external JSPromise<JSBoolean> _requestDeviceMotionPermission();
 
+@JS('isTiltPermissionRequired')
+external JSBoolean _isTiltPermissionRequired();
+
 @JS('latestAccelerometerData')
 external JSObject get _latestAccelerometerData;
 
@@ -24,12 +27,22 @@ external void _startTiltDetection(
 @JS('tiltDetection.stop')
 external void _stopTiltDetection();
 
+bool isTiltPermissionRequired() {
+  try {
+    return _isTiltPermissionRequired().toDart;
+  } catch (_) {
+    return true;
+  }
+}
+
 Future<bool> requestSensorPermission() async {
   try {
     final result = await _requestDeviceMotionPermission().toDart;
     return result.toDart;
   } catch (e) {
-    debugPrint('⚠️ requestSensorPermission error: $e');
+    if (kDebugMode) {
+      debugPrint('requestSensorPermission error: $e');
+    }
     return false;
   }
 }
@@ -66,18 +79,20 @@ void startWebTiltDetection(Function correctCallback, Function passCallback) {
       _correctCallbackRef!,
       _passCallbackRef!,
     );
-    debugPrint('Web tilt detection started');
   } catch (e) {
-    debugPrint('Failed to start web tilt detection: $e');
+    if (kDebugMode) {
+      debugPrint('Failed to start tilt detection: $e');
+    }
   }
 }
 
 void stopWebTiltDetection() {
   try {
     _stopTiltDetection();
-    debugPrint('Web tilt detection stopped');
   } catch (e) {
-    debugPrint('Failed to stop web tilt detection: $e');
+    if (kDebugMode) {
+      debugPrint('Failed to stop tilt detection: $e');
+    }
   } finally {
     _correctCallbackRef = null;
     _passCallbackRef = null;

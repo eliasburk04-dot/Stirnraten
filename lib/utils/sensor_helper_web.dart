@@ -12,6 +12,9 @@ external JSPromise<JSBoolean> _requestDeviceMotionPermission();
 @JS('isTiltPermissionRequired')
 external JSBoolean _isTiltPermissionRequired();
 
+@JS('isTiltSupported')
+external JSBoolean _isTiltSupported();
+
 @JS('latestAccelerometerData')
 external JSObject get _latestAccelerometerData;
 
@@ -32,6 +35,14 @@ bool isTiltPermissionRequired() {
     return _isTiltPermissionRequired().toDart;
   } catch (_) {
     return true;
+  }
+}
+
+bool isTiltSupported() {
+  try {
+    return _isTiltSupported().toDart;
+  } catch (_) {
+    return false;
   }
 }
 

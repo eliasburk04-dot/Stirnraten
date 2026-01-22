@@ -156,6 +156,11 @@
       typeof DeviceOrientationEvent.requestPermission === 'function';
   };
 
+  window.isTiltSupported = () => {
+    return typeof DeviceOrientationEvent !== 'undefined' ||
+      typeof DeviceMotionEvent !== 'undefined';
+  };
+
   window.requestDeviceMotionPermission = async () => {
     if (!window.isTiltPermissionRequired()) {
       return true;

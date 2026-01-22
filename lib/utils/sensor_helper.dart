@@ -9,6 +9,8 @@ bool getWebSensorAvailable() => impl.getWebSensorAvailable();
 
 bool isTiltPermissionRequired() => impl.isTiltPermissionRequired();
 
+bool isTiltSupported() => impl.isTiltSupported();
+
 void startWebTiltDetection(Function correctCallback, Function passCallback) =>
     impl.startWebTiltDetection(correctCallback, passCallback);
 

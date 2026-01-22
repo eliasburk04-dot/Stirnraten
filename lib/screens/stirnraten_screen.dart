@@ -66,6 +66,7 @@ const int _tiltCalibrationMs = 1000;
 
 enum _TiltPhase { idle, calibrating, activeWord, triggered, cooldown }
 enum _TiltAction { correct, pass }
+enum _WebTiltDialogAction { continueWithout, retry }
 
 class _TiltDetector {
   _TiltDetector({
@@ -230,6 +231,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   bool _webTiltPermissionGranted = false;
   bool _webTiltEnabled = false;
   bool _webTiltPermissionDenied = false;
+  bool _webTiltPreflightInProgress = false;
   
   // Feedback
   Color? _feedbackColor;
@@ -297,7 +299,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           onPlay: (list) async {
             await _customWordStorage.markPlayed(list.id);
             if (context.mounted) {
-              _startCountdownWithWords(list.words);
+              await _startCountdownWithWords(list.words);
             }
           },
         ),
@@ -325,17 +327,28 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _startCountdownWithWords(words);
   }
 
-  void _startCountdownWithWords(List<String> words) async {
+  Future<void> _startCountdownWithWords(List<String> words) async {
+    if (_webTiltPreflightInProgress) return;
+    _webTiltPreflightInProgress = true;
+
     // Unlock audio context on user interaction
     context.read<SoundService>().unlock();
 
-    // Request sensor permission (iOS/Android only)
-    if (kIsWeb) {
-      _webTiltEnabled = false;
-      _webTiltPermissionDenied = false;
-    } else {
-      _sensorPermissionGranted = await requestSensorPermission();
+    try {
+      if (kIsWeb) {
+        _webTiltEnabled = false;
+        _webTiltPermissionDenied = false;
+        final tiltAvailable = await _ensureWebTiltPermissionForStart();
+        if (!mounted) return;
+        _webTiltEnabled = tiltAvailable;
+      } else {
+        _sensorPermissionGranted = await requestSensorPermission();
+      }
+    } finally {
+      _webTiltPreflightInProgress = false;
     }
+
+    if (!mounted) return;
 
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
@@ -456,17 +469,83 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
   }
 
-  Future<void> _enableWebTilt() async {
-    final granted = await requestSensorPermission();
-    if (!mounted) return;
-    if (granted && _snapshot.state == StirnratenGameState.playing) {
-      startWebTiltDetection(_handleCorrect, _handlePass);
+  Future<bool> _ensureWebTiltPermissionForStart() async {
+    final supported = isTiltSupported();
+    _webTiltPermissionRequired = isTiltPermissionRequired();
+
+    if (!supported) {
+      _webTiltPermissionGranted = false;
+      _webTiltPermissionDenied = true;
+      _webTiltEnabled = false;
+      await _showWebTiltUnavailableDialog(
+        message:
+            'Bewegungssteuerung ist auf diesem Geraet nicht verfuegbar. Du kannst trotzdem mit Buttons spielen.',
+        canRetry: false,
+      );
+      return false;
     }
-    setState(() {
-      _webTiltPermissionGranted = granted;
-      _webTiltPermissionDenied = !granted;
-      _webTiltEnabled = granted;
-    });
+
+    if (!_webTiltPermissionRequired) {
+      _webTiltPermissionGranted = true;
+      _webTiltPermissionDenied = false;
+      _webTiltEnabled = true;
+      return true;
+    }
+
+    final granted = await requestSensorPermission();
+    if (granted) {
+      _webTiltPermissionGranted = true;
+      _webTiltPermissionDenied = false;
+      _webTiltEnabled = true;
+      return true;
+    }
+
+    final action = await _showWebTiltUnavailableDialog(
+      message:
+          'Bewegungssteuerung nicht erlaubt. Du kannst trotzdem mit Buttons spielen.',
+      canRetry: true,
+    );
+
+    if (action == _WebTiltDialogAction.retry) {
+      return _ensureWebTiltPermissionForStart();
+    }
+
+    _webTiltPermissionGranted = false;
+    _webTiltPermissionDenied = true;
+    _webTiltEnabled = false;
+    return false;
+  }
+
+  Future<_WebTiltDialogAction> _showWebTiltUnavailableDialog({
+    required String message,
+    required bool canRetry,
+  }) async {
+    final action = await showDialog<_WebTiltDialogAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Bewegungssteuerung'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(
+              context,
+              _WebTiltDialogAction.continueWithout,
+            ),
+            child: const Text('Weiter ohne Tilt'),
+          ),
+          if (canRetry)
+            TextButton(
+              onPressed: () => Navigator.pop(
+                context,
+                _WebTiltDialogAction.retry,
+              ),
+              child: const Text('Erneut versuchen'),
+            ),
+        ],
+      ),
+    );
+    return action ?? _WebTiltDialogAction.continueWithout;
   }
 
   void _processSensorData(double x, double y, double z) {
@@ -1136,34 +1215,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             child: _TiltStatusBadge(),
           ),
 
-        if (kIsWeb && !_webTiltPermissionGranted && _webTiltPermissionRequired)
-          Positioned(
-            bottom: 92,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                _TiltEnableButton(
-                  onTap: _enableWebTilt,
-                ),
-                if (_webTiltPermissionDenied)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 6),
-                    child: Text(
-                      'Tilt nicht verf\u00fcgbar',
-                      style: TextStyle(
-                        color: Color(0x80FFFFFF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
         Positioned(
           bottom: 40,
           left: 0,
@@ -1183,6 +1234,28 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             ),
           ),
         ),
+
+        if (kDebugMode && kIsWeb)
+          Positioned(
+            left: 16,
+            bottom: 80,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'tilt ${_webTiltPermissionGranted ? 'granted' : (_webTiltPermissionDenied ? 'denied' : 'unknown')}\n'
+                'enabled ${_webTiltEnabled ? 'yes' : 'no'}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
 
         if (kDebugMode && !kIsWeb)
           Positioned(
@@ -2324,67 +2397,6 @@ class _TiltStatusBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
           letterSpacing: 0.4,
           color: _categoryText,
-        ),
-      ),
-    );
-  }
-}
-
-class _TiltEnableButton extends StatefulWidget {
-  final VoidCallback onTap;
-
-  const _TiltEnableButton({required this.onTap});
-
-  @override
-  State<_TiltEnableButton> createState() => _TiltEnableButtonState();
-}
-
-class _TiltEnableButtonState extends State<_TiltEnableButton> {
-  bool _pressed = false;
-
-  void _setPressed(bool value) {
-    if (_pressed != value) {
-      setState(() => _pressed = value);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _setPressed(true),
-      onTapUp: (_) => _setPressed(false),
-      onTapCancel: () => _setPressed(false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              'Tilt aktivieren',
-              style: GoogleFonts.fredoka(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: _categoryText,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
         ),
       ),
     );

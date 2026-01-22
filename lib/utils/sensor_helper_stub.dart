@@ -6,6 +6,8 @@ bool getWebSensorAvailable() => false;
 
 bool isTiltPermissionRequired() => false;
 
+bool isTiltSupported() => false;
+
 void startWebTiltDetection(Function correctCallback, Function passCallback) {}
 
 void stopWebTiltDetection() {}

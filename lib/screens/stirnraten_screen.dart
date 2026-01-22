@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
 import '../services/custom_word_storage.dart';
-import 'custom_words_screen.dart';
 import '../engine/stirnraten_engine.dart';
 import '../utils/sensor_helper.dart';
 import '../utils/effects_quality.dart';
@@ -285,175 +284,22 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     super.dispose();
   }
 
-  void _showOwnWordsDialog() {
-    final TextEditingController controller = TextEditingController();
-    final TextEditingController nameController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Eigene Wörter', style: TextStyle(color: Colors.white)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Gib deine Wörter ein (getrennt durch Komma):',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: 'Apfel, Birne, Banane...',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        final text = controller.text;
-                        if (text.isNotEmpty) {
-                          final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                          if (words.isNotEmpty) {
-                            final name = await showDialog<String>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                backgroundColor: const Color(0xFF1E293B),
-                                title: const Text('Liste speichern', style: TextStyle(color: Colors.white)),
-                                content: TextField(
-                                  controller: nameController,
-                                  autofocus: true,
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Name der Liste (z.B. Obst)',
-                                    hintStyle: TextStyle(color: Colors.white30),
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, nameController.text),
-                                    child: const Text('Speichern'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (name != null && name.isNotEmpty) {
-                              await _categoryService.saveCategory(name, words);
-                              nameController.clear();
-                              setDialogState(() {}); // Refresh list
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Liste gespeichert!'), duration: Duration(seconds: 1)),
-                                );
-                              }
-                            }
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.save, size: 18),
-                      label: const Text('Liste speichern'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.blue),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Gespeicherte Listen:',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<List<CustomCategory>>(
-                    future: _categoryService.getCustomCategories(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const Text('Keine gespeicherten Listen', style: TextStyle(color: Colors.white30, fontSize: 12));
-                      }
-                      return Column(
-                        children: snapshot.data!.map((cat) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                            title: Text(cat.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                            subtitle: Text('${cat.words.length} Wörter', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.play_arrow, color: Colors.green, size: 20),
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    _startCountdownWithWords(cat.words);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                  onPressed: () async {
-                                    await _categoryService.deleteCategory(cat.name);
-                                    setDialogState(() {});
-                                  },
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              controller.text = cat.words.join(', ');
-                            },
-                          ),
-                        ),).toList(),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Abbrechen', style: TextStyle(color: Colors.white60)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.withValues(alpha: 0.2),
-                foregroundColor: Colors.blue,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () async {
-                final text = controller.text;
-                if (text.isNotEmpty) {
-                  final words = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-                  if (words.isNotEmpty) {
-                    if (mounted) {
-                      Navigator.pop(context);
-                      _startCountdownWithWords(words);
-                    }
-                  }
-                }
-              },
-              child: const Text('Starten'),
-            ),
-          ],
+  Future<void> _openCustomWordsScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CustomWordsScreen(
+          storage: _customWordStorage,
+          onPlay: (list) async {
+            await _customWordStorage.markPlayed(list.id);
+            if (context.mounted) {
+              _startCountdownWithWords(list.words);
+            }
+          },
         ),
       ),
     );
+    await _loadCustomWordLists();
   }
 
   void _toggleCategory(StirnratenCategory category) {
@@ -955,8 +801,11 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     return StirnratenCategory.values.map((category) {
       final title = StirnratenData.categoryNames[category] ?? category.name;
       final wordCount = StirnratenData.getWords(category).length;
-      final subtitle =
-          category == StirnratenCategory.ownWords ? 'Custom lists' : '';
+      final subtitle = category == StirnratenCategory.ownWords
+          ? (_customWordLists.isEmpty
+              ? 'Eigene Listen erstellen'
+              : '${_customWordLists.length} Listen')
+          : '';
       final tags = wordCount >= 120 ? const ['POPULAR'] : const <String>[];
       final difficulty = wordCount >= 140 ? 'HARD' : null;
       final progress = wordCount >= 140 ? 0.75 : null;
@@ -1046,7 +895,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                           isSelected: isSelected,
                           onTap: () {
                             if (item.isOwnWords) {
-                              _showOwnWordsDialog();
+                              _openCustomWordsScreen();
                             } else {
                               _toggleCategory(item.category);
                             }
@@ -1091,14 +940,12 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     );
   }
 
-  Future<void> _loadCustomCategories() async {
-    final categories = await _categoryService.getCustomCategories();
+  Future<void> _loadCustomWordLists() async {
+    final lists = await _customWordStorage.getLists();
     if (!mounted) return;
     setState(() {
-      _customCategories = categories;
+      _customWordLists = lists;
       _categoryItems = _buildCategoryItems();
-      _selectedCustomCategoryIds
-          .removeWhere((id) => !_customCategories.any((cat) => cat.name == id));
     });
   }
 
@@ -2624,6 +2471,772 @@ class _IconCircleButtonState extends State<_IconCircleButton> {
             widget.icon,
             color: iconColor,
             size: 22,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CustomWordsScreen extends StatefulWidget {
+  final CustomWordStorage storage;
+  final void Function(CustomWordList list) onPlay;
+
+  const CustomWordsScreen({
+    super.key,
+    required this.storage,
+    required this.onPlay,
+  });
+
+  @override
+  State<CustomWordsScreen> createState() => _CustomWordsScreenState();
+}
+
+class _CustomWordsScreenState extends State<CustomWordsScreen> {
+  List<CustomWordList> _lists = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLists();
+  }
+
+  Future<void> _loadLists() async {
+    final lists = await widget.storage.getLists();
+    if (!mounted) return;
+    setState(() {
+      _lists = lists;
+      _loading = false;
+    });
+  }
+
+  Future<void> _openEditor({CustomWordList? list}) async {
+    final result = await Navigator.push<CustomWordList?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CustomWordEditorScreen(
+          storage: widget.storage,
+          list: list,
+        ),
+      ),
+    );
+    if (result != null) {
+      await _loadLists();
+    }
+  }
+
+  Future<void> _confirmDelete(CustomWordList list) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Liste löschen'),
+        content: Text('"${list.title}" wirklich löschen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete == true) {
+      await widget.storage.deleteList(list.id);
+      await _loadLists();
+    }
+  }
+
+  Future<void> _playList(CustomWordList list) async {
+    await widget.storage.markPlayed(list.id);
+    if (!mounted) return;
+    Navigator.pop(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onPlay(list);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          const _CategoryBackground(),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                  child: Row(
+                    children: [
+                      _HeaderIconButton(
+                        icon: Icons.arrow_back_rounded,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Eigene Wörter',
+                          style: GoogleFonts.fredoka(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: _categoryText,
+                          ),
+                        ),
+                      ),
+                      _PrimaryPillButton(
+                        label: 'Neue Liste',
+                        icon: Icons.add_rounded,
+                        onTap: () => _openEditor(),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  child: Text(
+                    'Erstelle eigene Wortlisten und spiele sie jederzeit wieder.',
+                    style: GoogleFonts.nunito(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _categoryMuted,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _lists.isEmpty
+                          ? const _EmptyState()
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                              itemCount: _lists.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final list = _lists[index];
+                                return _CustomListCard(
+                                  list: list,
+                                  effects: effects,
+                                  onPlay: () => _playList(list),
+                                  onEdit: () => _openEditor(list: list),
+                                  onDelete: () => _confirmDelete(list),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CustomWordEditorScreen extends StatefulWidget {
+  final CustomWordStorage storage;
+  final CustomWordList? list;
+
+  const CustomWordEditorScreen({
+    super.key,
+    required this.storage,
+    this.list,
+  });
+
+  @override
+  State<CustomWordEditorScreen> createState() => _CustomWordEditorScreenState();
+}
+
+class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
+  static const int _minWords = 10;
+  static const int _maxWords = 500;
+
+  late final TextEditingController _titleController;
+  late final TextEditingController _wordsController;
+  int _wordCount = 0;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.list?.title ?? '');
+    _wordsController = TextEditingController(
+      text: widget.list?.words.join('\n') ?? '',
+    );
+    _recountWords();
+    _wordsController.addListener(_recountWords);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _wordsController.dispose();
+    super.dispose();
+  }
+
+  void _recountWords() {
+    final words = _parseWords(_wordsController.text, cap: _maxWords);
+    setState(() {
+      _wordCount = words.length;
+      if (_error != null && _wordCount >= _minWords) {
+        _error = null;
+      }
+    });
+  }
+
+  List<String> _parseWords(String raw, {int? cap}) {
+    final parts = raw.replaceAll(',', '\n').split('\n');
+    final seen = <String>{};
+    final result = <String>[];
+    for (final part in parts) {
+      final word = part.trim();
+      if (word.isEmpty) continue;
+      final key = word.toLowerCase();
+      if (seen.add(key)) {
+        result.add(word);
+      }
+      if (cap != null && result.length >= cap) break;
+    }
+    return result;
+  }
+
+  Future<void> _save() async {
+    final title = _titleController.text.trim();
+    final words = _parseWords(_wordsController.text, cap: _maxWords);
+    if (title.isEmpty) {
+      setState(() => _error = 'Bitte einen Titel angeben.');
+      return;
+    }
+    if (words.length < _minWords) {
+      setState(() => _error = 'Mindestens $_minWords Wörter erforderlich.');
+      return;
+    }
+
+    final now = DateTime.now();
+    final list = widget.list == null
+        ? widget.storage.buildNewList(title: title, words: words)
+        : widget.list!.copyWith(
+            title: title,
+            words: words,
+            updatedAt: now,
+          );
+
+    await widget.storage.saveList(list);
+    if (!mounted) return;
+    Navigator.pop(context, list);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSave =
+        _titleController.text.trim().isNotEmpty && _wordCount >= _minWords;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          const _CategoryBackground(),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                  child: Row(
+                    children: [
+                      _HeaderIconButton(
+                        icon: Icons.close_rounded,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.list == null ? 'Neue Liste' : 'Liste bearbeiten',
+                          style: GoogleFonts.fredoka(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: _categoryText,
+                          ),
+                        ),
+                      ),
+                      _PrimaryPillButton(
+                        label: 'Speichern',
+                        icon: Icons.check_rounded,
+                        onTap: canSave ? _save : null,
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 6),
+                        Text(
+                          'Titel',
+                          style: GoogleFonts.nunito(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: _categoryMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        _GlassInputField(
+                          controller: _titleController,
+                          hint: 'z.B. Familienrunde',
+                          maxLines: 1,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Text(
+                              'Wörter',
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: _categoryMuted,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '$_wordCount / $_maxWords',
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _wordCount >= _minWords
+                                    ? _categoryMuted
+                                    : const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _GlassInputField(
+                          controller: _wordsController,
+                          hint: 'Ein Wort pro Zeile',
+                          maxLines: 10,
+                          minLines: 8,
+                        ),
+                        const SizedBox(height: 8),
+                        if (_wordCount < _minWords)
+                          Text(
+                            'Mindestens $_minWords Wörter erforderlich.',
+                            style: GoogleFonts.nunito(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFEF4444),
+                            ),
+                          ),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _error!,
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SecondaryPillButton(
+                          label: 'Abbrechen',
+                          onTap: () => Navigator.pop(context),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _PrimaryPillButton(
+                          label: 'Speichern',
+                          icon: Icons.check_rounded,
+                          onTap: canSave ? _save : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomListCard extends StatelessWidget {
+  final CustomWordList list;
+  final EffectsConfig effects;
+  final VoidCallback onPlay;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _CustomListCard({
+    required this.list,
+    required this.effects,
+    required this.onPlay,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day.$month.$year';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final blurSigma = effects.blur(high: 16, medium: 10, low: 0);
+    final shadowBlur = effects.shadowBlur(high: 20, medium: 14, low: 8);
+
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      borderRadius: BorderRadius.circular(_categoryCardRadius),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _categoryGlass,
+          borderRadius: BorderRadius.circular(_categoryCardRadius),
+          border: Border.all(color: _categoryBorder, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: shadowBlur,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              list.title,
+              style: GoogleFonts.fredoka(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: _categoryText,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${list.wordCount} Wörter',
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: _categoryMuted,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              list.lastPlayedAt == null
+                  ? 'Noch nie gespielt'
+                  : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
+              style: GoogleFonts.nunito(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _categoryMuted.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _PrimaryPillButton(
+                    label: 'Spielen',
+                    icon: Icons.play_arrow_rounded,
+                    onTap: onPlay,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _IconPillButton(
+                  icon: Icons.edit_rounded,
+                  onTap: onEdit,
+                ),
+                const SizedBox(width: 8),
+                _IconPillButton(
+                  icon: Icons.delete_outline_rounded,
+                  onTap: onDelete,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: GlassBackdrop(
+          blurSigma: 12,
+          borderRadius: BorderRadius.circular(_categoryCardRadius),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: _categoryGlass,
+              borderRadius: BorderRadius.circular(_categoryCardRadius),
+              border: Border.all(color: _categoryBorder, width: 1.2),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.edit_note_rounded,
+                  size: 36,
+                  color: _categoryMuted,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Noch keine Listen erstellt',
+                  style: GoogleFonts.fredoka(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _categoryText,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Lege jetzt deine erste Wortliste an.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.nunito(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _categoryMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.75),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Icon(icon, color: _categoryText, size: 22),
+      ),
+    );
+  }
+}
+
+class _PrimaryPillButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  const _PrimaryPillButton({
+    required this.label,
+    this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.5,
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: _categoryPrimary,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: _categoryPrimary.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: _categoryText, size: 20),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.fredoka(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _categoryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SecondaryPillButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _SecondaryPillButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.nunito(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: _categoryText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconPillButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _IconPillButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.75),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+        child: Icon(icon, color: _categoryText, size: 20),
+      ),
+    );
+  }
+}
+
+class _GlassInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final int? maxLines;
+  final int? minLines;
+  final ValueChanged<String>? onChanged;
+
+  const _GlassInputField({
+    required this.controller,
+    required this.hint,
+    this.maxLines,
+    this.minLines,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassBackdrop(
+      blurSigma: 16,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: _categoryGlass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _categoryBorder),
+        ),
+        child: TextField(
+          controller: controller,
+          maxLines: maxLines,
+          minLines: minLines,
+          onChanged: onChanged,
+          style: GoogleFonts.nunito(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: _categoryText,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.nunito(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: _categoryMuted.withValues(alpha: 0.6),
+            ),
+            border: InputBorder.none,
           ),
         ),
       ),

@@ -38,5 +38,10 @@ flutter build web
 vercel deploy --prebuilt
 ```
 
+## Eigene Wörter
+- Eigene Wortlisten werden lokal auf dem Gerät gespeichert (kein Account nötig).
+- Mehrere Listen möglich, vollständig bearbeitbar (erstellen, ändern, löschen).
+- Funktioniert offline auf Web und iOS.
+
 ## Notes
 This project is platform-neutral and does not require any Replit-specific configuration.

@@ -1,239 +1,196 @@
 (() => {
-  const config = {
-    deadzone: 12,
-    trigger: 30,
+  const state = {
+    enabled: false,
+    correctCallback: null,
+    passCallback: null,
+    lastSampleMs: 0,
+    lastTriggerMs: 0,
     cooldownMs: 1000,
-    sampleMs: 40,
-    smoothingSamples: 6,
-    calibrationSamples: 10,
+    deadzone: 12,
+    threshold: 30,
+    armed: true,
+    smoothWindow: 6,
+    samples: [],
+    offset: 0,
+    calibrating: false,
+    calibrationStart: 0,
+    calibrationDuration: 500,
+    sensorAvailable: false,
+    useOrientation: true,
   };
-
-  let enabled = false;
-  let permissionGranted = false;
-  const permissionRequired =
-    typeof DeviceOrientationEvent !== 'undefined' &&
-    typeof DeviceOrientationEvent.requestPermission === 'function';
-
-  let onCorrect = null;
-  let onSkip = null;
-  let lastSampleTs = 0;
-  let lastTriggerTs = 0;
-  let armed = true;
-  let offset = 0;
-  let hasOffset = false;
-  let calibration = [];
-  let samples = [];
-  let usingMotion = false;
 
   window.latestAccelerometerData = { x: 0, y: 0, z: 0 };
   window.sensorAvailable = false;
 
-  const STORAGE_KEY = 'tiltOffsetV1';
+  const nowMs = () => (performance && performance.now ? performance.now() : Date.now());
 
-  function loadOffset() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed.value !== 'number') return;
-      const ageMs = Date.now() - (parsed.time || 0);
-      if (ageMs > 12 * 60 * 60 * 1000) return;
-      if (Math.abs(parsed.value) > 45) return;
-      offset = parsed.value;
-      hasOffset = true;
-    } catch (_) {}
-  }
-
-  function saveOffset(value) {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ value, time: Date.now() })
-      );
-    } catch (_) {}
-  }
-
-  function resetCalibration() {
-    offset = 0;
-    hasOffset = false;
-    calibration = [];
-    samples = [];
-    loadOffset();
-  }
-
-  function getOrientationAngle() {
+  const getOrientationAngle = () => {
     if (screen.orientation && typeof screen.orientation.angle === 'number') {
       return screen.orientation.angle;
     }
-    const w = window.orientation;
-    if (typeof w === 'number') return w;
+    if (typeof window.orientation === 'number') {
+      return window.orientation;
+    }
     return 0;
-  }
+  };
 
-  function mapForward(beta, gamma, angle) {
-    // iOS Safari (landscape): forward/back aligns with gamma, angle decides sign.
-    switch (angle) {
-      case 90:
-        return -gamma;
-      case -90:
-      case 270:
-        return gamma;
-      case 180:
-        return -beta;
-      case 0:
-      default:
-        return beta;
+  // iPhone Safari in landscape: gamma represents forward/back, but sign flips with angle.
+  const computeTiltForward = (beta, gamma) => {
+    const angle = getOrientationAngle();
+    if (angle === 90) {
+      return -gamma;
     }
-  }
-
-  function smoothValue(value) {
-    samples.push(value);
-    if (samples.length > config.smoothingSamples) {
-      samples.shift();
+    if (angle === -90 || angle === 270) {
+      return gamma;
     }
-    const sum = samples.reduce((acc, v) => acc + v, 0);
-    return sum / samples.length;
-  }
+    if (angle === 180) {
+      return -beta;
+    }
+    return beta;
+  };
 
-  function calibrate(value) {
-    if (hasOffset) return;
-    calibration.push(value);
-    if (calibration.length < config.calibrationSamples) return;
-    const sum = calibration.reduce((acc, v) => acc + v, 0);
-    offset = sum / calibration.length;
-    hasOffset = true;
-    saveOffset(offset);
-  }
+  const smoothValue = (value) => {
+    state.samples.push(value);
+    if (state.samples.length > state.smoothWindow) {
+      state.samples.shift();
+    }
+    const sum = state.samples.reduce((acc, v) => acc + v, 0);
+    return sum / state.samples.length;
+  };
 
-  function handleValue(raw, now) {
-    calibrate(raw);
-    const adjusted = raw - offset;
+  const processTilt = (rawValue) => {
+    const now = nowMs();
+    if (now - state.lastSampleMs < 33) {
+      return;
+    }
+    state.lastSampleMs = now;
+
+    if (state.calibrating) {
+      state.samples.push(rawValue);
+      if (now - state.calibrationStart >= state.calibrationDuration || state.samples.length >= 12) {
+        const sum = state.samples.reduce((acc, v) => acc + v, 0);
+        state.offset = sum / state.samples.length;
+        state.samples = [];
+        state.calibrating = false;
+      }
+      return;
+    }
+
+    const adjusted = rawValue - state.offset;
     const smoothed = smoothValue(adjusted);
 
-    if (Math.abs(smoothed) <= config.deadzone) {
-      armed = true;
+    if (Math.abs(smoothed) <= state.deadzone) {
+      state.armed = true;
       return;
     }
 
-    if (!armed) return;
-    if (now - lastTriggerTs < config.cooldownMs) return;
-
-    if (smoothed >= config.trigger) {
-      lastTriggerTs = now;
-      armed = false;
-      if (onCorrect) onCorrect();
+    if (!state.armed) {
       return;
     }
 
-    if (smoothed <= -config.trigger) {
-      lastTriggerTs = now;
-      armed = false;
-      if (onSkip) onSkip();
+    if (now - state.lastTriggerMs < state.cooldownMs) {
+      return;
     }
-  }
 
-  function handleOrientation(event) {
-    if (!enabled) return;
-    if (typeof event.beta !== 'number' || typeof event.gamma !== 'number') return;
+    if (smoothed >= state.threshold) {
+      state.lastTriggerMs = now;
+      state.armed = false;
+      if (state.correctCallback) {
+        state.correctCallback();
+      }
+      return;
+    }
 
-    const now = performance.now();
-    if (now - lastSampleTs < config.sampleMs) return;
-    lastSampleTs = now;
+    if (smoothed <= -state.threshold) {
+      state.lastTriggerMs = now;
+      state.armed = false;
+      if (state.passCallback) {
+        state.passCallback();
+      }
+    }
+  };
 
+  const handleOrientation = (event) => {
+    if (!state.enabled) return;
+    if (event.beta == null || event.gamma == null) {
+      state.useOrientation = false;
+      return;
+    }
     window.sensorAvailable = true;
+    state.sensorAvailable = true;
+    const tilt = computeTiltForward(event.beta, event.gamma);
+    processTilt(tilt);
+  };
 
-    const beta = event.beta;
-    const gamma = event.gamma;
-    const angle = getOrientationAngle();
-    const forward = mapForward(beta, gamma, angle);
-    handleValue(forward, now);
-  }
-
-  function handleMotion(event) {
-    if (!enabled || !event.accelerationIncludingGravity) return;
-    const now = performance.now();
-    if (now - lastSampleTs < config.sampleMs) return;
-    lastSampleTs = now;
-
+  const handleMotion = (event) => {
+    if (!state.enabled) return;
     const acc = event.accelerationIncludingGravity;
+    if (!acc) return;
     const x = acc.x || 0;
     const y = acc.y || 0;
     const z = acc.z || 0;
-
     window.latestAccelerometerData = { x, y, z };
     window.sensorAvailable = true;
-
-    const norm = Math.sqrt(x * x + y * y + z * z);
-    if (!norm) return;
-
+    state.sensorAvailable = true;
+    if (state.useOrientation) return;
+    const angle = getOrientationAngle();
+    let forward = 0;
+    const norm = Math.sqrt(x * x + y * y + z * z) || 1;
     const ny = y / norm;
     const nz = z / norm;
-    const beta = Math.atan2(ny, nz) * (180 / Math.PI);
-    const angle = getOrientationAngle();
-    const forward = mapForward(beta, 0, angle);
-    handleValue(forward, now);
-  }
-
-  function startListeners() {
-    if (usingMotion) {
-      window.addEventListener('devicemotion', handleMotion, { passive: true });
+    let pitch = Math.atan2(ny, nz) * (180 / Math.PI);
+    if (angle === 90) {
+      forward = -pitch;
+    } else if (angle === -90 || angle === 270) {
+      forward = pitch;
+    } else if (angle === 180) {
+      forward = -pitch;
     } else {
-      window.addEventListener('deviceorientation', handleOrientation, { passive: true });
+      forward = pitch;
     }
-  }
+    processTilt(forward);
+  };
 
-  function stopListeners() {
-    window.removeEventListener('deviceorientation', handleOrientation);
-    window.removeEventListener('devicemotion', handleMotion);
-  }
+  window.isTiltPermissionRequired = () => {
+    return typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function';
+  };
 
-  async function requestDeviceMotionPermission() {
-    if (!permissionRequired) {
-      permissionGranted = true;
+  window.requestDeviceMotionPermission = async () => {
+    if (!window.isTiltPermissionRequired()) {
       return true;
     }
     try {
       const result = await DeviceOrientationEvent.requestPermission();
-      permissionGranted = result === 'granted';
-      return permissionGranted;
+      return result === 'granted';
     } catch (_) {
-      permissionGranted = false;
       return false;
     }
-  }
+  };
 
-  function start(correctCallback, skipCallback) {
-    onCorrect = typeof correctCallback === 'function' ? correctCallback : null;
-    onSkip = typeof skipCallback === 'function' ? skipCallback : null;
-    enabled = true;
-    resetCalibration();
-    window.sensorAvailable = false;
-
-    usingMotion =
-      typeof DeviceOrientationEvent === 'undefined' &&
-      typeof DeviceMotionEvent !== 'undefined';
-
-    if (!permissionRequired) {
-      permissionGranted = true;
-    }
-
-    if (permissionGranted) {
-      stopListeners();
-      startListeners();
-    }
-  }
-
-  function stop() {
-    enabled = false;
-    onCorrect = null;
-    onSkip = null;
-    stopListeners();
-  }
-
-  window.requestDeviceMotionPermission = requestDeviceMotionPermission;
-  window.isTiltPermissionRequired = () => permissionRequired;
   window.tiltDetection = {
-    start,
-    stop,
+    start: (correctCallback, passCallback) => {
+      if (state.enabled) return;
+      state.enabled = true;
+      state.correctCallback = correctCallback;
+      state.passCallback = passCallback;
+      state.lastTriggerMs = 0;
+      state.lastSampleMs = 0;
+      state.armed = true;
+      state.useOrientation = true;
+      state.calibrating = true;
+      state.calibrationStart = nowMs();
+      state.samples = [];
+      window.addEventListener('deviceorientation', handleOrientation, { passive: true });
+      window.addEventListener('devicemotion', handleMotion, { passive: true });
+    },
+    stop: () => {
+      if (!state.enabled) return;
+      state.enabled = false;
+      state.correctCallback = null;
+      state.passCallback = null;
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('devicemotion', handleMotion);
+    },
   };
 })();

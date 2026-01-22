@@ -814,7 +814,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       case StirnratenGameState.setup:
         return _buildSetup();
       case StirnratenGameState.countdown:
-        return _buildCountdown();
+        return _buildGame();
       case StirnratenGameState.playing:
         return _buildGame();
       case StirnratenGameState.result:
@@ -822,37 +822,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
   }
   
-  Widget _buildCountdown() {
-    return Center(
-      child: GlassCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${_snapshot.countdown}',
-              style: const TextStyle(
-                fontSize: 120,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -2,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Handy an die Stirn!',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w500,
-                color: Color(0xB3FFFFFF),
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   List<_CategoryCardData> _buildCategoryItems() {
     return StirnratenCategory.values.map((category) {
       final title = StirnratenData.categoryNames[category] ?? category.name;
@@ -1086,7 +1055,13 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   Widget _buildGame() {
     final effects = EffectsConfig.of(context);
     final chipBlur = effects.blur(high: 8, medium: 6, low: 0);
-    final word = _snapshot.currentWord.toUpperCase();
+    final isCountdown = _snapshot.state == StirnratenGameState.countdown;
+    final word = isCountdown
+        ? '${_snapshot.countdown}'
+        : _snapshot.currentWord.toUpperCase();
+    final timerValue = isCountdown
+        ? '00:0${_snapshot.countdown}'
+        : _formatTime(_snapshot.timeLeft);
     return Stack(
       children: [
         Container(
@@ -1152,8 +1127,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _HudChip(
-                      value: _formatTime(_snapshot.timeLeft),
+                      value: timerValue,
                       blurSigma: chipBlur,
+                      icon: Icons.access_time_rounded,
                     ),
                     _HudChip(
                       label: 'SCORE',
@@ -1175,10 +1151,10 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                         child: Text(
                           word,
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.spaceGrotesk(
+                          style: GoogleFonts.fredoka(
                             fontSize: 96,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -2.0,
+                            letterSpacing: -1.6,
                             color: Colors.white,
                             shadows: [
                               Shadow(
@@ -1513,53 +1489,76 @@ class _HudChip extends StatelessWidget {
   final String value;
   final bool alignEnd;
   final double blurSigma;
+  final IconData? icon;
 
   const _HudChip({
     required this.value,
     required this.blurSigma,
     this.label,
     this.alignEnd = false,
+    this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
     final textAlign = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    const chipColor = Color(0xFFF6B62D);
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.22),
+            color: chipColor.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.25),
+              color: Colors.white.withValues(alpha: 0.18),
               width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: chipColor.withValues(alpha: 0.45),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-          child: Column(
-            crossAxisAlignment: textAlign,
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (label != null)
-                Text(
-                  label!,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              Text(
-                value,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: label == null ? 16 : 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+              if (icon != null) ...[
+                Icon(
+                  icon,
                   color: Colors.white,
+                  size: 16,
                 ),
+                const SizedBox(width: 6),
+              ],
+              Column(
+                crossAxisAlignment: textAlign,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (label != null)
+                    Text(
+                      label!,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: Colors.white.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  Text(
+                    value,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: label == null ? 16 : 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

@@ -11,8 +11,10 @@ class EffectsController extends ChangeNotifier {
   int _windowFrames = 0;
   int _slowFrames = 0;
   Duration _maxFrame = Duration.zero;
+  int _lastChangeMs = 0;
   static const int _sampleWindow = 30;
   static const Duration _slowFrameThreshold = Duration(milliseconds: 18);
+  static const Duration _minChangeInterval = Duration(seconds: 4);
 
   EffectsQuality get quality => _quality;
 
@@ -37,18 +39,34 @@ class EffectsController extends ChangeNotifier {
     if (_windowFrames < _sampleWindow) return;
 
     final slowRatio = _slowFrames / _windowFrames;
-    var next = _quality;
-    if (slowRatio > 0.28) {
-      next = EffectsQuality.low;
-    } else if (slowRatio > 0.12) {
-      next = EffectsQuality.medium;
-    } else if (slowRatio < 0.04) {
-      next = EffectsQuality.high;
-    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastChangeMs >= _minChangeInterval.inMilliseconds) {
+      var next = _quality;
+      switch (_quality) {
+        case EffectsQuality.high:
+          if (slowRatio > 0.22) {
+            next = EffectsQuality.medium;
+          }
+          break;
+        case EffectsQuality.medium:
+          if (slowRatio > 0.32) {
+            next = EffectsQuality.low;
+          } else if (slowRatio < 0.08) {
+            next = EffectsQuality.high;
+          }
+          break;
+        case EffectsQuality.low:
+          if (slowRatio < 0.15) {
+            next = EffectsQuality.medium;
+          }
+          break;
+      }
 
-    if (next != _quality) {
-      _quality = next;
-      notifyListeners();
+      if (next != _quality) {
+        _quality = next;
+        _lastChangeMs = nowMs;
+        notifyListeners();
+      }
     }
 
     if (kDebugMode) {
@@ -129,4 +147,7 @@ class EffectsConfig {
         return low;
     }
   }
+
+  bool get allowBlur => quality != EffectsQuality.low && !reduceMotion;
+  bool get allowHeavyEffects => quality == EffectsQuality.high && !reduceMotion;
 }

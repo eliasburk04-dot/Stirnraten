@@ -122,20 +122,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final effects = EffectsConfig.of(context);
     final enableMotion =
         effects.quality == EffectsQuality.high && !effects.reduceMotion;
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          RepaintBoundary(
-            child: _AnimatedBackground(
-              controller: _bgController,
-              effects: effects,
-              enableMotion: enableMotion,
+      body: TickerMode(
+        enabled: isCurrentRoute,
+        child: Stack(
+          children: [
+            RepaintBoundary(
+              child: _AnimatedBackground(
+                controller: _bgController,
+                effects: effects,
+                enableMotion: enableMotion,
+              ),
             ),
-          ),
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
                 final maxWidth = min(constraints.maxWidth, 420.0);
                 final availableHeight = constraints.maxHeight;
                 final cardHeight =
@@ -228,10 +231,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
                 );
-              },
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -284,7 +288,8 @@ class _TopIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 12, low: 0);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 10, medium: 6, low: 0) : 0.0;
     return GlassBackdrop(
       blurSigma: blurSigma,
       borderRadius: BorderRadius.circular(999),
@@ -331,8 +336,9 @@ class _StartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blurSigma = effects.blur(high: 20, medium: 16, low: 0);
-    final shadowBlur = effects.shadowBlur(high: 26, medium: 20, low: 12);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 12, medium: 8, low: 0) : 0.0;
+    final shadowBlur = effects.shadowBlur(high: 18, medium: 14, low: 10);
 
     return GlassBackdrop(
       blurSigma: blurSigma,
@@ -690,10 +696,10 @@ class _AnimatedBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blurPrimary = effects.shadowBlur(high: 140, medium: 110, low: 70);
-    final blurSecondary = effects.shadowBlur(high: 160, medium: 120, low: 80);
-    final blurTertiary = effects.shadowBlur(high: 120, medium: 90, low: 60);
-    final spread = effects.shadowBlur(high: 10, medium: 8, low: 4);
+    final blurPrimary = effects.shadowBlur(high: 95, medium: 70, low: 45);
+    final blurSecondary = effects.shadowBlur(high: 105, medium: 78, low: 50);
+    final blurTertiary = effects.shadowBlur(high: 85, medium: 60, low: 40);
+    final spread = effects.shadowBlur(high: 8, medium: 6, low: 3);
 
     Widget buildStack(double driftX, double driftY) {
       return Stack(

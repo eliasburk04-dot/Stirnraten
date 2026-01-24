@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,21 +14,11 @@ import '../utils/sensor_helper.dart';
 import '../utils/effects_quality.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
-
-const Color _categoryPrimary = Color(0xFF21D4EA);
-const Color _categoryBackgroundTop = Color(0xFFFFE277);
-const Color _categoryBackgroundMid = Color(0xFFFFB866);
-const Color _categoryBackgroundBottom = Color(0xFFF25B8F);
-const Color _categorySurface = Color(0xFFFBE6D4);
-const Color _categoryGlass = Color(0xB3FFFFFF);
-const Color _categoryBorder = Color(0x8CFFFFFF);
-const Color _categoryText = Color(0xFF1E293B);
-const Color _categoryMuted = Color(0xFF3B4A5A);
-const double _categoryCardRadius = 44;
-const Color _resultGradientTop = Color(0xFFFFD600);
-const Color _resultGradientBottom = Color(0xFFFF3B8E);
-const Color _resultPrimary = Color(0xFF0DF246);
-const Color _resultPink = Color(0xFFFF3B8E);
+import '../widgets/hud_timer.dart';
+import '../widgets/category_card.dart';
+import '../widgets/results_list.dart';
+import '../widgets/settings_panel.dart';
+import '../theme/stirnraten_colors.dart';
 
 const double _tiltNeutralZoneDeg = 10;
 const double _tiltTriggerDeg = 25;
@@ -174,13 +163,16 @@ class StirnratenScreen extends StatefulWidget {
   State<StirnratenScreen> createState() => _StirnratenScreenState();
 }
 
-class _StirnratenScreenState extends State<StirnratenScreen> {
+class _StirnratenScreenState extends State<StirnratenScreen>
+    with WidgetsBindingObserver {
   final CustomWordStorage _customWordStorage = CustomWordStorage();
   final StirnratenEngine _engine = StirnratenEngine();
   final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   bool _showSettingsPanel = false;
   Timer? _gameTimer;
   Timer? _countdownTimer;
+  late final ValueNotifier<String> _timerText;
+  late final ValueNotifier<String> _wordText;
   
   // Sensor handling
   final _tiltDetector = _TiltDetector(
@@ -193,7 +185,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   bool _canSkip = true;
   DateTime _lastSensorProcessing = DateTime.now();
-  static const Duration _sensorThrottle = Duration(milliseconds: 50);
+  static const Duration _sensorThrottle = Duration(milliseconds: 90);
   bool _sensorPermissionGranted = true;
   bool _showFallbackButtons = false;
   bool _receivedSensorEvent = false;
@@ -208,7 +200,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   String _searchQuery = '';
-  List<_CategoryCardData> _categoryItems = [];
+  List<CategoryCardData> _categoryItems = [];
   List<CustomWordList> _customWordLists = [];
 
   GameSnapshot get _snapshot => _engine.snapshot;
@@ -216,6 +208,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode()
       ..addListener(() {
@@ -223,6 +216,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           setState(() {});
         }
       });
+    _timerText = ValueNotifier(_formatTime(_snapshot.timeLeft));
+    _wordText = ValueNotifier('');
     _categoryItems = _buildCategoryItems();
     _loadCustomWordLists();
   }
@@ -236,6 +231,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _accelerometerSubscription = null;
     _sensorAvailabilityTimer?.cancel();
     _tiltDetector.stop();
+    WidgetsBinding.instance.removeObserver(this);
+    _timerText.dispose();
+    _wordText.dispose();
 
     if (kDebugMode) {
       debugPrint('🎮 Stirnraten: Sensors cleaned up');
@@ -248,6 +246,18 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_snapshot.state != StirnratenGameState.playing) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _accelerometerSubscription?.pause();
+    } else if (state == AppLifecycleState.resumed) {
+      _accelerometerSubscription?.resume();
+    }
   }
 
   Future<void> _openCustomWordsScreen() async {
@@ -305,16 +315,27 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       _showSettingsPanel = false;
       _engine.startCountdown(words);
     });
+    _syncCountdownUI();
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final shouldStart = _engine.tickCountdown();
       if (!shouldStart) {
-        setState(() {});
+        _syncCountdownUI();
       } else {
         timer.cancel();
         _startGame();
       }
     });
+  }
+
+  void _syncCountdownUI() {
+    _wordText.value = '${_snapshot.countdown}';
+    _timerText.value = _formatCountdown(_snapshot.countdown);
+  }
+
+  void _syncGameUI() {
+    _wordText.value = _snapshot.currentWord.toUpperCase();
+    _timerText.value = _formatTime(_snapshot.timeLeft);
   }
 
   void _startGame() {
@@ -327,6 +348,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       _feedbackColor = null; // Reset any lingering feedback
       _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
     });
+    _syncGameUI();
     if (_snapshot.state == StirnratenGameState.result) {
       _endGame();
       return;
@@ -359,7 +381,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       if (shouldEnd) {
         _endGame();
       } else {
-        setState(() {});
+        _timerText.value = _formatTime(_snapshot.timeLeft);
       }
     });
   }
@@ -461,7 +483,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       _endGame();
       return;
     }
-    setState(() {});
+    _wordText.value = _snapshot.currentWord.toUpperCase();
   }
 
   void _handleCorrect() {
@@ -695,7 +717,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }
   }
   
-  List<_CategoryCardData> _buildCategoryItems() {
+  List<CategoryCardData> _buildCategoryItems() {
     return StirnratenCategory.values.map((category) {
       final title = StirnratenData.categoryNames[category] ?? category.name;
       final wordCount = StirnratenData.getWords(category).length;
@@ -707,7 +729,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
       final tags = wordCount >= 120 ? const ['POPULAR'] : const <String>[];
       final difficulty = wordCount >= 140 ? 'HARD' : null;
       final progress = wordCount >= 140 ? 0.75 : null;
-      return _CategoryCardData(
+      return CategoryCardData(
         category: category,
         title: title,
         subtitle: subtitle,
@@ -722,7 +744,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     }).toList();
   }
 
-  List<_CategoryCardData> get _filteredCategories {
+  List<CategoryCardData> get _filteredCategories {
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) {
       return _categoryItems;
@@ -745,7 +767,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
 
     return DefaultTextStyle(
       style: GoogleFonts.nunito(
-        color: _categoryText,
+        color: StirnratenColors.categoryText,
         fontWeight: FontWeight.w600,
       ),
       child: Stack(
@@ -788,7 +810,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                         final item = filteredCategories[index];
                         final isSelected =
                             _selectedCategories.contains(item.category);
-                        return _CategoryCard(
+                        return CategoryCard(
                           data: item,
                           isSelected: isSelected,
                           onTap: () {
@@ -822,7 +844,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             Positioned(
               top: topInset + 88,
               right: 20,
-              child: _SettingsPanel(
+              child: SettingsPanel(
                 selectedTime: _snapshot.selectedTime,
                 selectedMode: _snapshot.selectedMode,
                 onTimeChanged: (value) {
@@ -926,15 +948,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
   }
 
   Widget _buildGame() {
-    final effects = EffectsConfig.of(context);
-    final chipBlur = effects.blur(high: 8, medium: 6, low: 0);
-    final isCountdown = _snapshot.state == StirnratenGameState.countdown;
-    final word = isCountdown
-        ? '${_snapshot.countdown}'
-        : _snapshot.currentWord.toUpperCase();
-    final timerValue = isCountdown
-        ? '00:0${_snapshot.countdown}'
-        : _formatTime(_snapshot.timeLeft);
     return Stack(
       children: [
         Container(
@@ -996,21 +1009,9 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _HudChip(
-                      value: timerValue,
-                      blurSigma: chipBlur,
-                      icon: Icons.access_time_rounded,
-                    ),
-                    _HudChip(
-                      label: 'SCORE',
-                      value: '${_snapshot.score}',
-                      alignEnd: true,
-                      blurSigma: chipBlur,
-                    ),
-                  ],
+                child: HudTimerRow(
+                  timerText: _timerText,
+                  score: _snapshot.score,
                 ),
               ),
               Expanded(
@@ -1019,25 +1020,30 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: SizedBox(
                       width: double.infinity,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          word,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.fredoka(
-                            fontSize: 96,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 22,
-                                offset: const Offset(0, 10),
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: _wordText,
+                        builder: (context, value, _) {
+                          return FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              value,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.fredoka(
+                                fontSize: 96,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 22,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -1105,6 +1111,10 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  String _formatCountdown(int totalSeconds) {
+    return '00:${totalSeconds.toString().padLeft(2, '0')}';
+  }
+
   Widget _buildResult() {
     final results = _snapshot.results;
     return Stack(
@@ -1116,8 +1126,8 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  _resultGradientTop,
-                  _resultGradientBottom,
+                  StirnratenColors.resultGradientTop,
+                  StirnratenColors.resultGradientBottom,
                 ],
               ),
             ),
@@ -1178,7 +1188,7 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                               style: GoogleFonts.spaceGrotesk(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: _resultPink,
+                                color: StirnratenColors.resultPink,
                                 letterSpacing: 2.4,
                               ),
                             ),
@@ -1208,91 +1218,19 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
                     ),
                     const SizedBox(height: 24),
                     Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: Colors.white.withValues(alpha: 0.25),
-                                      ),
-                                    ),
-                                  ),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      'Zusammenfassung',
-                                      style: GoogleFonts.spaceGrotesk(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: results.isEmpty
-                                      ? Center(
-                                          child: Text(
-                                            'Keine Ergebnisse',
-                                            style: GoogleFonts.spaceGrotesk(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.white.withValues(alpha: 0.7),
-                                            ),
-                                          ),
-                                        )
-                                      : ListView.separated(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          itemCount: results.length,
-                                          separatorBuilder: (_, __) =>
-                                              const SizedBox(height: 12),
-                                          itemBuilder: (context, index) {
-                                            final result = results[index];
-                                            return _ResultSummaryItem(
-                                              word: result.word,
-                                              isCorrect: result.correct,
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: ResultsList(results: results),
                     ),
                     const SizedBox(height: 24),
                     _ResultActionButton(
                       label: 'Erneut spielen',
-                      backgroundColor: _resultPrimary,
+                      backgroundColor: StirnratenColors.resultPrimary,
                       textColor: const Color(0xFF1F2937),
                       onTap: () {
                         setState(() {
                           _engine.resetToSetup();
                         });
                       },
-                      glowColor: _resultPrimary.withValues(alpha: 0.5),
+                      glowColor: StirnratenColors.resultPrimary.withValues(alpha: 0.5),
                       isPrimary: true,
                     ),
                     const SizedBox(height: 12),
@@ -1332,90 +1270,6 @@ class _StirnratenScreenState extends State<StirnratenScreen> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HudChip extends StatelessWidget {
-  final String? label;
-  final String value;
-  final bool alignEnd;
-  final double blurSigma;
-  final IconData? icon;
-
-  const _HudChip({
-    required this.value,
-    required this.blurSigma,
-    this.label,
-    this.alignEnd = false,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textAlign = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    const chipColor = Color(0xFFF6B62D);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: chipColor.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.18),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: chipColor.withValues(alpha: 0.45),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
-              ],
-              Column(
-                crossAxisAlignment: textAlign,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (label != null)
-                    Text(
-                      label!,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: Colors.white.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  Text(
-                    value,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: label == null ? 16 : 17,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1567,68 +1421,6 @@ class _ConfettiShape extends StatelessWidget {
   }
 }
 
-class _ResultSummaryItem extends StatelessWidget {
-  final String word;
-  final bool isCorrect;
-
-  const _ResultSummaryItem({
-    required this.word,
-    required this.isCorrect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final backgroundOpacity = isCorrect ? 0.4 : 0.2;
-    final textColor =
-        isCorrect ? Colors.white : Colors.white.withValues(alpha: 0.6);
-    final iconBackground = isCorrect ? const Color(0xFF16A34A) : const Color(0xFFEF4444);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: backgroundOpacity),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              word,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-                fontStyle: isCorrect ? FontStyle.normal : FontStyle.italic,
-                decoration:
-                    isCorrect ? TextDecoration.none : TextDecoration.lineThrough,
-              ),
-            ),
-          ),
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: iconBackground,
-              boxShadow: [
-                BoxShadow(
-                  color: iconBackground.withValues(alpha: 0.5),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Icon(
-              isCorrect ? Icons.check_rounded : Icons.close_rounded,
-              size: 18,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ResultActionButton extends StatefulWidget {
   final String label;
   final Color backgroundColor;
@@ -1708,368 +1500,6 @@ class _ResultActionButtonState extends State<_ResultActionButton> {
   }
 }
 
-class _CategoryCardData {
-  const _CategoryCardData({
-    required this.category,
-    required this.title,
-    required this.subtitle,
-    required this.accentColor,
-    this.icon,
-    this.tags = const <String>[],
-    this.isNsfw = false,
-    this.difficulty,
-    this.progress,
-    this.isOwnWords = false,
-  });
-
-  final StirnratenCategory category;
-  final String title;
-  final String subtitle;
-  final Color? accentColor;
-  final IconData? icon;
-  final List<String> tags;
-  final bool isNsfw;
-  final String? difficulty;
-  final double? progress;
-  final bool isOwnWords;
-}
-
-class _CategoryCard extends StatefulWidget {
-  final _CategoryCardData data;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _CategoryCard({
-    required this.data,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  State<_CategoryCard> createState() => _CategoryCardState();
-}
-
-class _CategoryCardState extends State<_CategoryCard> {
-  bool _pressed = false;
-
-  void _setPressed(bool value) {
-    if (_pressed != value) {
-      setState(() => _pressed = value);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
-    final glowBlur = effects.shadowBlur(high: 26, medium: 20, low: 12);
-    final accent = widget.data.accentColor ?? _categoryPrimary;
-    final glowAlpha = effects.shadowAlpha(
-      high: widget.isSelected ? 0.28 : 0.12,
-      medium: widget.isSelected ? 0.2 : 0.08,
-      low: 0,
-    );
-    final borderColor =
-        widget.isSelected ? accent.withValues(alpha: 0.8) : _categoryBorder;
-    final scale = _pressed ? 0.96 : (widget.isSelected ? 1.02 : 1.0);
-    final showGlow = widget.isSelected;
-
-    return RepaintBoundary(
-      child: GestureDetector(
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: scale,
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOut,
-          child: GlassBackdrop(
-            blurSigma: blurSigma,
-            borderRadius: BorderRadius.circular(_categoryCardRadius),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: _categoryGlass,
-                borderRadius: BorderRadius.circular(_categoryCardRadius),
-                border: Border.all(
-                  color: borderColor,
-                  width: widget.isSelected ? 2 : 1,
-                ),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.7),
-                    Colors.white.withValues(alpha: 0.45),
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: glowBlur,
-                    offset: const Offset(0, 12),
-                  ),
-                  if (showGlow)
-                    BoxShadow(
-                      color: accent.withValues(alpha: glowAlpha),
-                      blurRadius: glowBlur + 6,
-                      offset: const Offset(0, 10),
-                    ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      _CategoryIconBadge(
-                        icon: widget.data.icon,
-                        accent: accent,
-                      ),
-                      const Spacer(),
-                      if (widget.data.isNsfw || widget.isSelected)
-                        Wrap(
-                          spacing: 6,
-                          children: [
-                            if (widget.data.isNsfw)
-                              const _CategoryBadge(
-                                label: '18+',
-                                background: Color(0xFFB91C1C),
-                                textColor: Colors.white,
-                              ),
-                            if (widget.isSelected)
-                              const _CategoryBadge(
-                                label: 'SELECTED',
-                                background: _categoryPrimary,
-                                textColor: _categoryText,
-                              ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    widget.data.title,
-                    style: GoogleFonts.fredoka(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: _categoryText,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  if (widget.data.subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.data.subtitle,
-                      style: GoogleFonts.nunito(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _categoryMuted.withValues(alpha: 0.75),
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                  if (widget.data.tags.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: widget.data.tags
-                          .map(
-                            (tag) => _TagChip(
-                              label: tag,
-                              color: accent,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  if (widget.data.progress != null ||
-                      widget.data.difficulty != null) ...[
-                    const SizedBox(height: 12),
-                    _CategoryProgress(
-                      progress: widget.data.progress,
-                      difficulty: widget.data.difficulty,
-                      accent: accent,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryIconBadge extends StatelessWidget {
-  final IconData? icon;
-  final Color accent;
-
-  const _CategoryIconBadge({
-    required this.icon,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.75),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: accent.withValues(alpha: 0.55),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: 0.22),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: icon == null
-          ? const SizedBox.shrink()
-          : Icon(
-              icon,
-              color: accent,
-              size: 24,
-            ),
-    );
-  }
-}
-
-class _CategoryBadge extends StatelessWidget {
-  final String label;
-  final Color background;
-  final Color textColor;
-
-  const _CategoryBadge({
-    required this.label,
-    required this.background,
-    required this.textColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.nunito(
-          color: textColor,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _TagChip({
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: color.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.nunito(
-          color: _categoryText,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryProgress extends StatelessWidget {
-  final double? progress;
-  final String? difficulty;
-  final Color accent;
-
-  const _CategoryProgress({
-    required this.progress,
-    required this.difficulty,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final value = (progress ?? 0.0).clamp(0.0, 1.0);
-
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 6,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: value,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        accent.withValues(alpha: 0.95),
-                        accent.withValues(alpha: 0.55),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (difficulty != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            difficulty!,
-            style: GoogleFonts.nunito(
-              color: _categoryMuted.withValues(alpha: 0.8),
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _BottomActionBar extends StatelessWidget {
   final int selectedCount;
   final VoidCallback? onPressed;
@@ -2093,9 +1523,9 @@ class _BottomActionBar extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                _categoryBackgroundBottom.withValues(alpha: 0.0),
-                _categoryBackgroundBottom.withValues(alpha: 0.6),
-                _categoryBackgroundBottom,
+                StirnratenColors.categoryBackgroundBottom.withValues(alpha: 0.0),
+                StirnratenColors.categoryBackgroundBottom.withValues(alpha: 0.6),
+                StirnratenColors.categoryBackgroundBottom,
               ],
             ),
           ),
@@ -2140,9 +1570,9 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
     final isEnabled = widget.onTap != null;
     final shadowBlur = effects.shadowBlur(high: 24, medium: 18, low: 0);
     final shadowAlpha = effects.shadowAlpha(high: 0.4, medium: 0.28, low: 0);
-    final backgroundColor = isEnabled ? _categoryPrimary : _categorySurface;
+    final backgroundColor = isEnabled ? StirnratenColors.categoryPrimary : StirnratenColors.categorySurface;
     final foregroundColor =
-        isEnabled ? _categoryText : _categoryMuted.withValues(alpha: 0.7);
+        isEnabled ? StirnratenColors.categoryText : StirnratenColors.categoryMuted.withValues(alpha: 0.7);
 
     return GestureDetector(
       onTapDown: isEnabled ? (_) => _setPressed(true) : null,
@@ -2162,7 +1592,7 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
             boxShadow: isEnabled && shadowBlur > 0
                 ? [
                     BoxShadow(
-                      color: _categoryPrimary.withValues(alpha: shadowAlpha),
+                      color: StirnratenColors.categoryPrimary.withValues(alpha: shadowAlpha),
                       blurRadius: shadowBlur,
                       offset: const Offset(0, 12),
                     ),
@@ -2193,224 +1623,13 @@ class _PrimaryActionButtonState extends State<_PrimaryActionButton> {
                   ),
                   child: const Icon(
                     Icons.play_arrow_rounded,
-                    color: _categoryText,
+                    color: StirnratenColors.categoryText,
                     size: 24,
                   ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SegmentedOption<T> {
-  final T value;
-  final String label;
-
-  const _SegmentedOption({required this.value, required this.label});
-}
-
-class _SegmentedControl<T> extends StatelessWidget {
-  final List<_SegmentedOption<T>> options;
-  final T value;
-  final ValueChanged<T> onChanged;
-
-  const _SegmentedControl({
-    required this.options,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: options.map((option) {
-        final selected = option.value == value;
-        final backgroundColor = selected
-            ? _categoryPrimary
-            : Colors.white.withValues(alpha: 0.7);
-        final textColor = selected
-            ? _categoryText
-            : _categoryMuted.withValues(alpha: 0.75);
-
-        return GestureDetector(
-          onTap: () => onChanged(option.value),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: selected
-                    ? _categoryPrimary
-                    : Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-            child: Text(
-              option.label,
-              style: GoogleFonts.nunito(
-                color: textColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _SettingsPanel extends StatelessWidget {
-  final int selectedTime;
-  final ValueChanged<int> onTimeChanged;
-  final GameMode selectedMode;
-  final ValueChanged<GameMode> onModeChanged;
-
-  const _SettingsPanel({
-    required this.selectedTime,
-    required this.onTimeChanged,
-    required this.selectedMode,
-    required this.onModeChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
-    final shadowBlur = effects.shadowBlur(high: 22, medium: 16, low: 10);
-    const timeOptions = [
-      _SegmentedOption<int>(value: 30, label: '30s'),
-      _SegmentedOption<int>(value: 60, label: '60s'),
-      _SegmentedOption<int>(value: 90, label: '90s'),
-      _SegmentedOption<int>(value: 120, label: '120s'),
-    ];
-
-    const modeOptions = [
-      _SegmentedOption<GameMode>(value: GameMode.classic, label: 'Klassisch'),
-      _SegmentedOption<GameMode>(value: GameMode.suddenDeath, label: 'Sudden'),
-      _SegmentedOption<GameMode>(value: GameMode.hardcore, label: 'Hardcore'),
-      _SegmentedOption<GameMode>(value: GameMode.drinking, label: 'Trinkspiel'),
-    ];
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
-      child: GlassBackdrop(
-        blurSigma: blurSigma,
-        borderRadius: BorderRadius.circular(_categoryCardRadius),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _categoryGlass,
-            borderRadius: BorderRadius.circular(_categoryCardRadius),
-            border: Border.all(color: _categoryBorder, width: 1.2),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.7),
-                Colors.white.withValues(alpha: 0.45),
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: shadowBlur,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                Text(
-                  'Spielzeit',
-                  style: GoogleFonts.nunito(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
-                    color: _categoryMuted,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _SegmentedControl<int>(
-                  options: timeOptions,
-                  value: selectedTime,
-                  onChanged: onTimeChanged,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Modus',
-                  style: GoogleFonts.nunito(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
-                    color: _categoryMuted,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _SegmentedControl<GameMode>(
-                  options: modeOptions,
-                  value: selectedMode,
-                  onChanged: onModeChanged,
-                ),
-                if (selectedMode == GameMode.drinking) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Optionaler Party-Modus. Bitte verantwortungsvoll.',
-                    style: GoogleFonts.nunito(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _categoryMuted.withValues(alpha: 0.75),
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _SettingsChip(label: 'Skip = $drinkingSkipSips Schluck'),
-                      _SettingsChip(label: 'Fehler = $drinkingWrongSips Schluck'),
-                    ],
-                  ),
-                ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsChip extends StatelessWidget {
-  final String label;
-
-  const _SettingsChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.nunito(
-          color: _categoryMuted.withValues(alpha: 0.8),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
         ),
       ),
     );
@@ -2444,8 +1663,7 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final showShadow = overlapsContent || shrinkOffset > 0;
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 18, medium: 0, low: 0);
-    final shadowBlur = effects.shadowBlur(high: 18, medium: 14, low: 10);
+    final shadowBlur = effects.shadowBlur(high: 12, medium: 10, low: 8);
     final header = Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       decoration: BoxDecoration(
@@ -2479,7 +1697,7 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
                   child: Text(
                     'Stirnraten',
                     style: GoogleFonts.fredoka(
-                      color: _categoryText,
+                      color: StirnratenColors.categoryText,
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.2,
@@ -2505,17 +1723,7 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
       ),
     );
 
-    return ClipRect(
-      child: blurSigma <= 0
-          ? header
-          : BackdropFilter(
-              filter: ImageFilter.blur(
-                sigmaX: blurSigma,
-                sigmaY: blurSigma,
-              ),
-              child: header,
-            ),
-    );
+    return ClipRect(child: header);
   }
 
   @override
@@ -2551,12 +1759,12 @@ class _SearchField extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isFocused ? _categoryPrimary : Colors.white.withValues(alpha: 0.5),
+          color: isFocused ? StirnratenColors.categoryPrimary : Colors.white.withValues(alpha: 0.5),
         ),
         boxShadow: isFocused
             ? [
                 BoxShadow(
-                  color: _categoryPrimary.withValues(alpha: 0.2),
+                  color: StirnratenColors.categoryPrimary.withValues(alpha: 0.2),
                   blurRadius: 14,
                   offset: const Offset(0, 8),
                 ),
@@ -2567,7 +1775,7 @@ class _SearchField extends StatelessWidget {
         children: [
           Icon(
             Icons.search_rounded,
-            color: _categoryMuted.withValues(alpha: 0.6),
+            color: StirnratenColors.categoryMuted.withValues(alpha: 0.6),
             size: 18,
           ),
           const SizedBox(width: 8),
@@ -2577,14 +1785,14 @@ class _SearchField extends StatelessWidget {
               focusNode: focusNode,
               onChanged: onChanged,
               style: GoogleFonts.nunito(
-                color: _categoryText,
+                color: StirnratenColors.categoryText,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
               decoration: InputDecoration(
                 hintText: 'Search decks...',
                 hintStyle: GoogleFonts.nunito(
-                  color: _categoryMuted.withValues(alpha: 0.55),
+                  color: StirnratenColors.categoryMuted.withValues(alpha: 0.55),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -2626,14 +1834,14 @@ class _IconCircleButtonState extends State<_IconCircleButton> {
   @override
   Widget build(BuildContext context) {
     final backgroundColor = widget.isPrimary
-        ? _categoryPrimary
+        ? StirnratenColors.categoryPrimary
         : Colors.white.withValues(alpha: 0.75);
     final borderColor = widget.isPrimary
-        ? _categoryPrimary
+        ? StirnratenColors.categoryPrimary
         : Colors.white.withValues(alpha: 0.55);
     final iconColor = widget.isPrimary
-        ? _categoryText
-        : _categoryText.withValues(alpha: 0.8);
+        ? StirnratenColors.categoryText
+        : StirnratenColors.categoryText.withValues(alpha: 0.8);
     final scale = _pressed ? 0.94 : 1.0;
 
     return GestureDetector(
@@ -2661,7 +1869,7 @@ class _IconCircleButtonState extends State<_IconCircleButton> {
               ),
               if (widget.isPrimary)
                 BoxShadow(
-                  color: _categoryPrimary.withValues(alpha: 0.35),
+                  color: StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -2786,7 +1994,7 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
                           style: GoogleFonts.fredoka(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: _categoryText,
+                            color: StirnratenColors.categoryText,
                           ),
                         ),
                       ),
@@ -2805,7 +2013,7 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
                     style: GoogleFonts.nunito(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _categoryMuted,
+                      color: StirnratenColors.categoryMuted,
                     ),
                   ),
                 ),
@@ -2961,7 +2169,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                           style: GoogleFonts.fredoka(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
-                            color: _categoryText,
+                            color: StirnratenColors.categoryText,
                           ),
                         ),
                       ),
@@ -2985,7 +2193,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                           style: GoogleFonts.nunito(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
-                            color: _categoryMuted,
+                            color: StirnratenColors.categoryMuted,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -3003,7 +2211,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                               style: GoogleFonts.nunito(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
-                                color: _categoryMuted,
+                                color: StirnratenColors.categoryMuted,
                               ),
                             ),
                             const Spacer(),
@@ -3013,7 +2221,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: _wordCount >= _minWords
-                                    ? _categoryMuted
+                                    ? StirnratenColors.categoryMuted
                                     : const Color(0xFFEF4444),
                               ),
                             ),
@@ -3107,25 +2315,24 @@ class _CustomListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blurSigma = effects.blur(high: 16, medium: 10, low: 0);
-    final shadowBlur = effects.shadowBlur(high: 20, medium: 14, low: 8);
+    final shadowBlur = effects.shadowBlur(high: 18, medium: 12, low: 6);
 
-    return GlassBackdrop(
-      blurSigma: blurSigma,
-      borderRadius: BorderRadius.circular(_categoryCardRadius),
+    return RepaintBoundary(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _categoryGlass,
-          borderRadius: BorderRadius.circular(_categoryCardRadius),
-          border: Border.all(color: _categoryBorder, width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: shadowBlur,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          color: StirnratenColors.categoryGlass,
+          borderRadius: BorderRadius.circular(categoryCardRadius),
+          border: Border.all(color: StirnratenColors.categoryBorder, width: 1.2),
+          boxShadow: shadowBlur > 0
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: shadowBlur,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3135,7 +2342,7 @@ class _CustomListCard extends StatelessWidget {
               style: GoogleFonts.fredoka(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _categoryText,
+                color: StirnratenColors.categoryText,
               ),
             ),
             const SizedBox(height: 6),
@@ -3144,7 +2351,7 @@ class _CustomListCard extends StatelessWidget {
               style: GoogleFonts.nunito(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: _categoryMuted,
+                color: StirnratenColors.categoryMuted,
               ),
             ),
             const SizedBox(height: 6),
@@ -3155,7 +2362,7 @@ class _CustomListCard extends StatelessWidget {
               style: GoogleFonts.nunito(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: _categoryMuted.withValues(alpha: 0.8),
+                color: StirnratenColors.categoryMuted.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 12),
@@ -3192,18 +2399,22 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: GlassBackdrop(
-          blurSigma: 12,
-          borderRadius: BorderRadius.circular(_categoryCardRadius),
+          blurSigma: blurSigma,
+          enableBlur: effects.allowBlur,
+          borderRadius: BorderRadius.circular(categoryCardRadius),
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: _categoryGlass,
-              borderRadius: BorderRadius.circular(_categoryCardRadius),
-              border: Border.all(color: _categoryBorder, width: 1.2),
+              color: StirnratenColors.categoryGlass,
+              borderRadius: BorderRadius.circular(categoryCardRadius),
+              border: Border.all(color: StirnratenColors.categoryBorder, width: 1.2),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -3211,7 +2422,7 @@ class _EmptyState extends StatelessWidget {
                 const Icon(
                   Icons.edit_note_rounded,
                   size: 36,
-                  color: _categoryMuted,
+                  color: StirnratenColors.categoryMuted,
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -3219,7 +2430,7 @@ class _EmptyState extends StatelessWidget {
                   style: GoogleFonts.fredoka(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: _categoryText,
+                    color: StirnratenColors.categoryText,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -3229,7 +2440,7 @@ class _EmptyState extends StatelessWidget {
                   style: GoogleFonts.nunito(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: _categoryMuted,
+                    color: StirnratenColors.categoryMuted,
                   ),
                 ),
               ],
@@ -3269,7 +2480,7 @@ class _HeaderIconButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(icon, color: _categoryText, size: 22),
+        child: Icon(icon, color: StirnratenColors.categoryText, size: 22),
       ),
     );
   }
@@ -3297,11 +2508,11 @@ class _PrimaryPillButton extends StatelessWidget {
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: _categoryPrimary,
+            color: StirnratenColors.categoryPrimary,
             borderRadius: BorderRadius.circular(999),
             boxShadow: [
               BoxShadow(
-                color: _categoryPrimary.withValues(alpha: 0.35),
+                color: StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -3311,7 +2522,7 @@ class _PrimaryPillButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, color: _categoryText, size: 20),
+                Icon(icon, color: StirnratenColors.categoryText, size: 20),
                 const SizedBox(width: 6),
               ],
               Text(
@@ -3319,7 +2530,7 @@ class _PrimaryPillButton extends StatelessWidget {
                 style: GoogleFonts.fredoka(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: _categoryText,
+                  color: StirnratenColors.categoryText,
                 ),
               ),
             ],
@@ -3356,7 +2567,7 @@ class _SecondaryPillButton extends StatelessWidget {
             style: GoogleFonts.nunito(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: _categoryText,
+              color: StirnratenColors.categoryText,
             ),
           ),
         ),
@@ -3386,7 +2597,7 @@ class _IconPillButton extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
         ),
-        child: Icon(icon, color: _categoryText, size: 20),
+        child: Icon(icon, color: StirnratenColors.categoryText, size: 20),
       ),
     );
   }
@@ -3409,15 +2620,19 @@ class _GlassInputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
     return GlassBackdrop(
-      blurSigma: 16,
+      blurSigma: blurSigma,
+      enableBlur: effects.allowBlur,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _categoryGlass,
+          color: StirnratenColors.categoryGlass,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _categoryBorder),
+          border: Border.all(color: StirnratenColors.categoryBorder),
         ),
         child: TextField(
           controller: controller,
@@ -3427,14 +2642,14 @@ class _GlassInputField extends StatelessWidget {
           style: GoogleFonts.nunito(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: _categoryText,
+            color: StirnratenColors.categoryText,
           ),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: GoogleFonts.nunito(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: _categoryMuted.withValues(alpha: 0.6),
+              color: StirnratenColors.categoryMuted.withValues(alpha: 0.6),
             ),
             border: InputBorder.none,
           ),
@@ -3450,85 +2665,87 @@ class _CategoryBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurRadius = effects.shadowBlur(high: 140, medium: 110, low: 70);
-    final spreadRadius = effects.shadowBlur(high: 18, medium: 12, low: 8);
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _categoryBackgroundTop,
-            _categoryBackgroundMid,
-            _categoryBackgroundBottom,
+    final blurRadius = effects.shadowBlur(high: 95, medium: 70, low: 45);
+    final spreadRadius = effects.shadowBlur(high: 12, medium: 8, low: 5);
+    return RepaintBoundary(
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              StirnratenColors.categoryBackgroundTop,
+              StirnratenColors.categoryBackgroundMid,
+              StirnratenColors.categoryBackgroundBottom,
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -100,
+              right: -60,
+              child: _GlowOrb(
+                color: const Color(0xFFFFF1A6).withValues(alpha: 0.35),
+                size: 280,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+            Positioned(
+              bottom: -140,
+              left: -80,
+              child: _GlowOrb(
+                color: const Color(0xFFFF9FCE).withValues(alpha: 0.28),
+                size: 320,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+            Positioned(
+              top: 180,
+              right: -80,
+              child: _GlowOrb(
+                color: const Color(0xFF7DD3FC).withValues(alpha: 0.22),
+                size: 240,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+            Positioned(
+              top: 90,
+              left: 40,
+              child: _DecorDot(
+                size: 12,
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.7),
+              ),
+            ),
+            Positioned(
+              top: 140,
+              right: 80,
+              child: _DecorDiamond(
+                size: 14,
+                color: const Color(0xFFF472B6).withValues(alpha: 0.65),
+              ),
+            ),
+            Positioned(
+              bottom: 180,
+              left: 50,
+              child: _DecorDot(
+                size: 14,
+                color: const Color(0xFF34D399).withValues(alpha: 0.6),
+              ),
+            ),
+            Positioned(
+              bottom: 120,
+              right: 60,
+              child: _DecorDiamond(
+                size: 12,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            ),
           ],
         ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -100,
-            right: -60,
-            child: _GlowOrb(
-              color: const Color(0xFFFFF1A6).withValues(alpha: 0.35),
-              size: 280,
-              blurRadius: blurRadius,
-              spreadRadius: spreadRadius,
-            ),
-          ),
-          Positioned(
-            bottom: -140,
-            left: -80,
-            child: _GlowOrb(
-              color: const Color(0xFFFF9FCE).withValues(alpha: 0.28),
-              size: 320,
-              blurRadius: blurRadius,
-              spreadRadius: spreadRadius,
-            ),
-          ),
-          Positioned(
-            top: 180,
-            right: -80,
-            child: _GlowOrb(
-              color: const Color(0xFF7DD3FC).withValues(alpha: 0.22),
-              size: 240,
-              blurRadius: blurRadius,
-              spreadRadius: spreadRadius,
-            ),
-          ),
-          Positioned(
-            top: 90,
-            left: 40,
-            child: _DecorDot(
-              size: 12,
-              color: const Color(0xFF60A5FA).withValues(alpha: 0.7),
-            ),
-          ),
-          Positioned(
-            top: 140,
-            right: 80,
-            child: _DecorDiamond(
-              size: 14,
-              color: const Color(0xFFF472B6).withValues(alpha: 0.65),
-            ),
-          ),
-          Positioned(
-            bottom: 180,
-            left: 50,
-            child: _DecorDot(
-              size: 14,
-              color: const Color(0xFF34D399).withValues(alpha: 0.6),
-            ),
-          ),
-          Positioned(
-            bottom: 120,
-            right: 60,
-            child: _DecorDiamond(
-              size: 12,
-              color: Colors.white.withValues(alpha: 0.55),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -3635,3 +2852,4 @@ class _NoScrollbarBehavior extends ScrollBehavior {
     return child;
   }
 }
+

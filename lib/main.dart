@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,8 @@ class StirnratenApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const showPerfOverlay =
+        bool.fromEnvironment('SHOW_PERF_OVERLAY', defaultValue: false);
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
@@ -28,6 +31,7 @@ class StirnratenApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Stirnraten',
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: kDebugMode && showPerfOverlay,
         theme: ThemeData.dark(),
         home: const HomeScreen(),
       ),

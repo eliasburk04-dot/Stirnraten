@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
 import '../services/custom_word_storage.dart';
+import '../services/game_settings_storage.dart';
 import '../engine/stirnraten_engine.dart';
 import '../engine/drinking_balance.dart';
 import '../utils/sensor_helper.dart';
@@ -167,6 +168,7 @@ class StirnratenScreen extends StatefulWidget {
 class _StirnratenScreenState extends State<StirnratenScreen>
     with WidgetsBindingObserver {
   final CustomWordStorage _customWordStorage = CustomWordStorage();
+  final GameSettingsStorage _settingsStorage = GameSettingsStorage();
   final StirnratenEngine _engine = StirnratenEngine();
   final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   bool _showSettingsPanel = false;
@@ -174,6 +176,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   Timer? _countdownTimer;
   late final ValueNotifier<String> _timerText;
   late final ValueNotifier<String> _wordText;
+  late final ValueNotifier<bool> _timerBlinkOn;
   
   // Sensor handling
   final _tiltDetector = _TiltDetector(
@@ -219,8 +222,10 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       });
     _timerText = ValueNotifier(_formatTime(_snapshot.timeLeft));
     _wordText = ValueNotifier('');
+    _timerBlinkOn = ValueNotifier(false);
     _categoryItems = _buildCategoryItems();
     _loadCustomWordLists();
+    _loadGameSettings();
   }
 
   @override
@@ -246,6 +251,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     ]);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _timerBlinkOn.dispose();
     super.dispose();
   }
 
@@ -279,6 +285,21 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     await _loadCustomWordLists();
   }
 
+  Future<void> _loadGameSettings() async {
+    final savedTime = await _settingsStorage.getSelectedTime();
+    final savedMode = await _settingsStorage.getSelectedMode();
+    if (!mounted) return;
+    if (savedTime == null && savedMode == null) return;
+    setState(() {
+      if (savedTime != null) {
+        _engine.setSelectedTime(savedTime);
+      }
+      if (savedMode != null) {
+        _engine.setSelectedMode(savedMode);
+      }
+    });
+  }
+
   void _toggleCategory(StirnratenCategory category) {
     setState(() {
       if (_selectedCategories.contains(category)) {
@@ -306,6 +327,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _sensorPermissionGranted = await requestSensorPermission();
     }
 
+    if (!mounted) return;
+
     // Force landscape for the game
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -317,11 +340,13 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _engine.startCountdown(words);
     });
     _syncCountdownUI();
+    context.read<SoundService>().playCountdown();
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final shouldStart = _engine.tickCountdown();
       if (!shouldStart) {
         _syncCountdownUI();
+        context.read<SoundService>().playCountdown();
       } else {
         timer.cancel();
         _startGame();
@@ -332,11 +357,17 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   void _syncCountdownUI() {
     _wordText.value = '${_snapshot.countdown}';
     _timerText.value = _formatCountdown(_snapshot.countdown);
+    if (_timerBlinkOn.value) {
+      _timerBlinkOn.value = false;
+    }
   }
 
   void _syncGameUI() {
     _wordText.value = _snapshot.currentWord.toUpperCase();
     _timerText.value = _formatTime(_snapshot.timeLeft);
+    if (_snapshot.timeLeft > 5 && _timerBlinkOn.value) {
+      _timerBlinkOn.value = false;
+    }
   }
 
   void _startGame() {
@@ -383,6 +414,13 @@ class _StirnratenScreenState extends State<StirnratenScreen>
         _endGame();
       } else {
         _timerText.value = _formatTime(_snapshot.timeLeft);
+        final timeLeft = _snapshot.timeLeft;
+        if (timeLeft <= 5 && timeLeft > 0) {
+          _timerBlinkOn.value = !_timerBlinkOn.value;
+          context.read<SoundService>().playCountdown();
+        } else if (_timerBlinkOn.value) {
+          _timerBlinkOn.value = false;
+        }
       }
     });
   }
@@ -618,7 +656,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     context.read<SoundService>().playWrong();
 
     _showFeedback(
-      const Color(0xCC06B6D4),
+      const Color(0xCCEF4444),
       label: '-${hardcoreSkipPenaltySeconds}s',
       durationMs: 450,
       onFinished: () {
@@ -644,8 +682,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     context.read<SoundService>().playWrong();
 
     _showFeedback(
-      const Color(0xCC06B6D4),
-      label: 'Trink $drinkingSkipSips Schluck',
+      const Color(0xCCEF4444),
       durationMs: 550,
       onFinished: () {
         _nextWord();
@@ -681,6 +718,9 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     _accelerometerSubscription?.cancel();
     _sensorAvailabilityTimer?.cancel();
     _tiltDetector.stop();
+    if (_timerBlinkOn.value) {
+      _timerBlinkOn.value = false;
+    }
 
     context.read<SoundService>().playEnd();
     
@@ -850,9 +890,11 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                 selectedMode: _snapshot.selectedMode,
                 onTimeChanged: (value) {
                   setState(() => _engine.setSelectedTime(value));
+                  _settingsStorage.saveSelectedTime(value);
                 },
                 onModeChanged: (mode) {
                   setState(() => _engine.setSelectedMode(mode));
+                  _settingsStorage.saveSelectedMode(mode);
                 },
               ),
             ),
@@ -1012,6 +1054,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
                 child: HudTimerRow(
                   timerText: _timerText,
+                  timerBlink: _timerBlinkOn,
                   score: _snapshot.score,
                 ),
               ),
@@ -1116,24 +1159,9 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     return '00:${totalSeconds.toString().padLeft(2, '0')}';
   }
 
-  String _formatHalfUnits(int units) {
-    if (units == 0) return '0';
-    return units.isEven ? '${units ~/ 2}' : '${units ~/ 2}.5';
-  }
-
-  String _formatSignedHalfUnits(int units) {
-    if (units >= 0) return _formatHalfUnits(units);
-    return '-${_formatHalfUnits(units.abs())}';
-  }
-
   Widget _buildDrinkingBalancePanel({
     required DrinkingBalance balance,
-    required int correctCount,
-    required int passCount,
   }) {
-    final giveUnits = correctCount;
-    final takeUnits = passCount;
-    final netUnits = giveUnits - takeUnits;
     final netLabel = balance.finalGive > 0
         ? '➡️ Du verteilst ${balance.finalGive} Schlucke'
         : balance.finalTake > 0
@@ -1167,39 +1195,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '✔ Richtig: $correctCount → ${_formatHalfUnits(giveUnits)} Schlucke verteilen',
-            style: GoogleFonts.nunito(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '⏭ Übersprungen: $passCount → ${_formatHalfUnits(takeUnits)} Schlucke trinken',
-            style: GoogleFonts.nunito(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
           const SizedBox(height: 10),
-          Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.15),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Gegenrechnung: ${_formatHalfUnits(giveUnits)} - ${_formatHalfUnits(takeUnits)} = ${_formatSignedHalfUnits(netUnits)}',
-            style: GoogleFonts.nunito(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(height: 8),
           Text(
             netLabel,
             style: GoogleFonts.spaceGrotesk(
@@ -1326,8 +1322,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                       const SizedBox(height: 16),
                       _buildDrinkingBalancePanel(
                         balance: drinkingBalance,
-                        correctCount: correctCount,
-                        passCount: passCount,
                       ),
                     ],
                     const SizedBox(height: 24),

@@ -6,25 +6,29 @@ import '../utils/effects_quality.dart';
 
 class HudTimerRow extends StatelessWidget {
   final ValueListenable<String> timerText;
+  final ValueListenable<bool> timerBlink;
   final int score;
 
   const HudTimerRow({
     super.key,
     required this.timerText,
+    required this.timerBlink,
     required this.score,
   });
 
   @override
   Widget build(BuildContext context) {
+    final merged = Listenable.merge([timerText, timerBlink]);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        ValueListenableBuilder<String>(
-          valueListenable: timerText,
-          builder: (context, value, _) {
+        AnimatedBuilder(
+          animation: merged,
+          builder: (context, _) {
             return HudChip(
-              value: value,
+              value: timerText.value,
               icon: Icons.access_time_rounded,
+              isBlinking: timerBlink.value,
             );
           },
         ),
@@ -43,6 +47,7 @@ class HudChip extends StatelessWidget {
   final String value;
   final bool alignEnd;
   final IconData? icon;
+  final bool isBlinking;
 
   const HudChip({
     super.key,
@@ -50,28 +55,32 @@ class HudChip extends StatelessWidget {
     this.label,
     this.alignEnd = false,
     this.icon,
+    this.isBlinking = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final textAlign = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     const chipColor = Color(0xFFF6B62D);
+    final backgroundColor =
+        isBlinking ? const Color(0xFFEF4444) : chipColor;
     final effects = EffectsConfig.of(context);
     final shadowBlur = effects.shadowBlur(high: 10, medium: 6, low: 0);
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: chipColor.withValues(alpha: 0.92),
+        color: backgroundColor.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          color: Colors.white.withValues(alpha: 0.22),
           width: 1,
         ),
         boxShadow: shadowBlur > 0
             ? [
                 BoxShadow(
-                  color: chipColor.withValues(alpha: 0.35),
+                  color: backgroundColor.withValues(alpha: 0.4),
                   blurRadius: shadowBlur,
                   offset: const Offset(0, 6),
                 ),

@@ -28,6 +28,7 @@ class SettingsPanel extends StatelessWidget {
       _SegmentedOption<int>(value: 60, label: '60s'),
       _SegmentedOption<int>(value: 90, label: '90s'),
       _SegmentedOption<int>(value: 120, label: '120s'),
+      _SegmentedOption<int>(value: 150, label: '150s'),
     ];
 
     const modeOptions = [
@@ -108,15 +109,6 @@ class SettingsPanel extends StatelessWidget {
                   height: 1.3,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _SettingsChip(label: 'Skip = $drinkingSkipSips Schluck'),
-                  _SettingsChip(label: 'Fehler = $drinkingWrongSips Schluck'),
-                ],
-              ),
             ],
           ],
         ),
@@ -187,29 +179,3 @@ class _SegmentedControl<T> extends StatelessWidget {
   }
 }
 
-class _SettingsChip extends StatelessWidget {
-  final String label;
-
-  const _SettingsChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.nunito(
-          color: StirnratenColors.categoryMuted.withValues(alpha: 0.8),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-}

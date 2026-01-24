@@ -6,10 +6,12 @@ import '../theme/stirnraten_colors.dart';
 
 class ResultsList extends StatelessWidget {
   final List<GameResult> results;
+  final bool showHeader;
 
   const ResultsList({
     super.key,
     required this.results,
+    this.showHeader = true,
   });
 
   @override
@@ -25,27 +27,28 @@ class ResultsList extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.25),
+          if (showHeader)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Zusammenfassung',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Zusammenfassung',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
           Expanded(
             child: results.isEmpty
                 ? Center(

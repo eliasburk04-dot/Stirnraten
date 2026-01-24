@@ -9,6 +9,7 @@ class SoundService {
   late final AudioPlayer _startPlayer;
   late final AudioPlayer _endPlayer;
   late final AudioPlayer _countdownPlayer;
+  late final AudioPlayer _countdownStartPlayer;
   
   bool _isMuted = false;
   bool _isInitialized = false;
@@ -19,6 +20,7 @@ class SoundService {
   static const double _volStart = 0.8;
   static const double _volEnd = 0.75;
   static const double _volCountdown = 0.7;
+  static const double _volCountdownStart = 0.7;
 
   SoundService() {
     _correctPlayer = AudioPlayer();
@@ -26,6 +28,7 @@ class SoundService {
     _startPlayer = AudioPlayer();
     _endPlayer = AudioPlayer();
     _countdownPlayer = AudioPlayer();
+    _countdownStartPlayer = AudioPlayer();
     _initAudioContext();
   }
 
@@ -38,6 +41,7 @@ class SoundService {
         _startPlayer,
         _endPlayer,
         _countdownPlayer,
+        _countdownStartPlayer,
       ];
       
       for (final player in players) {
@@ -73,6 +77,7 @@ class SoundService {
         _startPlayer.setSource(AssetSource('sounds/start.wav')),
         _endPlayer.setSource(AssetSource('sounds/end.wav')),
         _countdownPlayer.setSource(AssetSource('sounds/countdown.wav')),
+        _countdownStartPlayer.setSource(AssetSource('sounds/countdown_start.wav')),
       ]);
       
       // Set volumes once
@@ -81,6 +86,7 @@ class SoundService {
       await _startPlayer.setVolume(_volStart);
       await _endPlayer.setVolume(_volEnd);
       await _countdownPlayer.setVolume(_volCountdown);
+      await _countdownStartPlayer.setVolume(_volCountdownStart);
       
       if (kDebugMode) {
         debugPrint('✅ All sounds preloaded');
@@ -123,6 +129,7 @@ class SoundService {
     _startPlayer.stop();
     _endPlayer.stop();
     _countdownPlayer.stop();
+    _countdownStartPlayer.stop();
   }
 
   Future<void> _playFromPlayer(AudioPlayer player, String soundName) async {
@@ -180,6 +187,16 @@ class SoundService {
     } catch (_) {}
   }
 
+  Future<void> playCountdownStart() async {
+    await _playFromPlayer(_countdownStartPlayer, 'countdown_start');
+  }
+
+  Future<void> stopCountdownStart() async {
+    try {
+      await _countdownStartPlayer.stop();
+    } catch (_) {}
+  }
+
   Future<void> playExplosion() async {
     HapticFeedback.heavyImpact();
     await _playFromPlayer(_endPlayer, 'explosion');
@@ -203,6 +220,7 @@ class SoundService {
     _startPlayer.dispose();
     _endPlayer.dispose();
     _countdownPlayer.dispose();
+    _countdownStartPlayer.dispose();
     
     if (kDebugMode) {
       debugPrint('🔊 SoundService disposed');

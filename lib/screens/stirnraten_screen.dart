@@ -172,12 +172,14 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   final StirnratenEngine _engine = StirnratenEngine();
   final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   bool _showSettingsPanel = false;
+  bool _resultsExpanded = false;
   Timer? _gameTimer;
   Timer? _countdownTimer;
-  Timer? _countdownIntroStopTimer;
+  Timer? _countdownStartStopTimer;
   late final ValueNotifier<String> _timerText;
   late final ValueNotifier<String> _wordText;
   late final ValueNotifier<bool> _timerBlinkOn;
+  bool _endCountdownStarted = false;
   
   // Sensor handling
   final _tiltDetector = _TiltDetector(
@@ -233,7 +235,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   void dispose() {
     _gameTimer?.cancel();
     _countdownTimer?.cancel();
-    _countdownIntroStopTimer?.cancel();
+    _countdownStartStopTimer?.cancel();
     _feedbackTimer?.cancel();
     _accelerometerSubscription?.cancel();
     _accelerometerSubscription = null;
@@ -356,11 +358,11 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   void _startCountdownIntroSound() {
-    _countdownIntroStopTimer?.cancel();
+    _countdownStartStopTimer?.cancel();
     final sound = context.read<SoundService>();
-    sound.playCountdown();
-    _countdownIntroStopTimer = Timer(const Duration(seconds: 3), () {
-      sound.stopCountdown();
+    sound.playCountdownStart();
+    _countdownStartStopTimer = Timer(const Duration(seconds: 3), () {
+      sound.stopCountdownStart();
     });
   }
 
@@ -390,8 +392,9 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _feedbackColor = null; // Reset any lingering feedback
       _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
     });
-    _countdownIntroStopTimer?.cancel();
-    context.read<SoundService>().stopCountdown();
+    _countdownStartStopTimer?.cancel();
+    context.read<SoundService>().stopCountdownStart();
+    _endCountdownStarted = false;
     _syncGameUI();
     if (_snapshot.state == StirnratenGameState.result) {
       _endGame();
@@ -427,9 +430,14 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       } else {
         _timerText.value = _formatTime(_snapshot.timeLeft);
         final timeLeft = _snapshot.timeLeft;
+        if (timeLeft == 5 && !_endCountdownStarted) {
+          _endCountdownStarted = true;
+          context.read<SoundService>().playCountdown();
+        } else if (timeLeft > 5) {
+          _endCountdownStarted = false;
+        }
         if (timeLeft <= 5 && timeLeft > 0) {
           _timerBlinkOn.value = !_timerBlinkOn.value;
-          context.read<SoundService>().playCountdown();
         } else if (_timerBlinkOn.value) {
           _timerBlinkOn.value = false;
         }
@@ -733,7 +741,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     if (_timerBlinkOn.value) {
       _timerBlinkOn.value = false;
     }
-    _countdownIntroStopTimer?.cancel();
+    _countdownStartStopTimer?.cancel();
+    context.read<SoundService>().stopCountdownStart();
     context.read<SoundService>().stopCountdown();
 
     context.read<SoundService>().playEnd();
@@ -928,6 +937,10 @@ class _StirnratenScreenState extends State<StirnratenScreen>
 
   void _toggleSettingsPanel() {
     setState(() => _showSettingsPanel = !_showSettingsPanel);
+  }
+
+  void _toggleResultsExpanded() {
+    setState(() => _resultsExpanded = !_resultsExpanded);
   }
 
   void _closeSettingsPanel() {
@@ -1223,6 +1236,59 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     );
   }
 
+  Widget _buildResultsSection(List<GameResult> results) {
+    final listHeight = (MediaQuery.of(context).size.height * 0.35)
+        .clamp(220.0, 360.0)
+        .toDouble();
+    final icon =
+        _resultsExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          onTap: _toggleResultsExpanded,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  'Zusammenfassung',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                Icon(icon, color: Colors.white),
+              ],
+            ),
+          ),
+        ),
+        ClipRect(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            height: _resultsExpanded ? listHeight : 0,
+            child: _resultsExpanded
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: ResultsList(results: results, showHeader: false),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResult() {
     final results = _snapshot.results;
     final correctCount = results.where((result) => result.correct).length;
@@ -1339,9 +1405,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                       ),
                     ],
                     const SizedBox(height: 24),
-                    Expanded(
-                      child: ResultsList(results: results),
-                    ),
+                    _buildResultsSection(results),
                     const SizedBox(height: 24),
                     _ResultActionButton(
                       label: 'Erneut spielen',

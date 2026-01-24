@@ -10,6 +10,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
 import '../services/custom_word_storage.dart';
 import '../engine/stirnraten_engine.dart';
+import '../engine/drinking_balance.dart';
 import '../utils/sensor_helper.dart';
 import '../utils/effects_quality.dart';
 import '../data/words.dart';
@@ -1115,8 +1116,113 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     return '00:${totalSeconds.toString().padLeft(2, '0')}';
   }
 
+  String _formatHalfUnits(int units) {
+    if (units == 0) return '0';
+    return units.isEven ? '${units ~/ 2}' : '${units ~/ 2}.5';
+  }
+
+  String _formatSignedHalfUnits(int units) {
+    if (units >= 0) return _formatHalfUnits(units);
+    return '-${_formatHalfUnits(units.abs())}';
+  }
+
+  Widget _buildDrinkingBalancePanel({
+    required DrinkingBalance balance,
+    required int correctCount,
+    required int passCount,
+  }) {
+    final giveUnits = correctCount;
+    final takeUnits = passCount;
+    final netUnits = giveUnits - takeUnits;
+    final netLabel = balance.finalGive > 0
+        ? '➡️ Du verteilst ${balance.finalGive} Schlucke'
+        : balance.finalTake > 0
+            ? '➡️ Du trinkst ${balance.finalTake} Schlucke'
+            : '➡️ Keine Schlucke';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '🍺 Trinkbilanz',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '✔ Richtig: $correctCount → ${_formatHalfUnits(giveUnits)} Schlucke verteilen',
+            style: GoogleFonts.nunito(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '⏭ Übersprungen: $passCount → ${_formatHalfUnits(takeUnits)} Schlucke trinken',
+            style: GoogleFonts.nunito(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.15),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Gegenrechnung: ${_formatHalfUnits(giveUnits)} - ${_formatHalfUnits(takeUnits)} = ${_formatSignedHalfUnits(netUnits)}',
+            style: GoogleFonts.nunito(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            netLabel,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResult() {
     final results = _snapshot.results;
+    final correctCount = results.where((result) => result.correct).length;
+    final passCount = results.length - correctCount;
+    final drinkingBalance = _snapshot.activeMode == GameMode.drinking
+        ? DrinkingBalance.fromCounts(
+            correctCount: correctCount,
+            passCount: passCount,
+          )
+        : null;
     return Stack(
       children: [
         Positioned.fill(
@@ -1216,6 +1322,14 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                         ),
                       ),
                     ),
+                    if (drinkingBalance != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDrinkingBalancePanel(
+                        balance: drinkingBalance,
+                        correctCount: correctCount,
+                        passCount: passCount,
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     Expanded(
                       child: ResultsList(results: results),

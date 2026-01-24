@@ -16,3 +16,5 @@
 ## Visual Changes
 - Glass blur removed from HUD and list/grid elements for performance.
 - Background glow is slightly softer/less intense on low-end devices.
+
+- Drinking Mode Results: Trinkbilanz hinzugefuegt (0.5 pro richtig/pass, Gegenrechnung, half-up rounding).

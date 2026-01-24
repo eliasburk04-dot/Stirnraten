@@ -36,6 +36,7 @@ class HudTimerRow extends StatelessWidget {
           label: 'SCORE',
           value: '$score',
           alignEnd: true,
+          inlineLabel: true,
         ),
       ],
     );
@@ -48,6 +49,7 @@ class HudChip extends StatelessWidget {
   final bool alignEnd;
   final IconData? icon;
   final bool isBlinking;
+  final bool inlineLabel;
 
   const HudChip({
     super.key,
@@ -56,6 +58,7 @@ class HudChip extends StatelessWidget {
     this.alignEnd = false,
     this.icon,
     this.isBlinking = false,
+    this.inlineLabel = false,
   });
 
   @override
@@ -98,31 +101,57 @@ class HudChip extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          Column(
-            crossAxisAlignment: textAlign,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (label != null)
+          if (inlineLabel && label != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
                   label!,
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 9,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    color: Colors.white.withValues(alpha: 0.85),
+                    letterSpacing: 1.0,
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
-              Text(
-                value,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: Colors.white,
+                const SizedBox(width: 6),
+                Text(
+                  value,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Column(
+              crossAxisAlignment: textAlign,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (label != null)
+                  Text(
+                    label!,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                Text(
+                  value,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

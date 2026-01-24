@@ -174,6 +174,12 @@ class SoundService {
     await _playFromPlayer(_countdownPlayer, 'countdown');
   }
 
+  Future<void> stopCountdown() async {
+    try {
+      await _countdownPlayer.stop();
+    } catch (_) {}
+  }
+
   Future<void> playExplosion() async {
     HapticFeedback.heavyImpact();
     await _playFromPlayer(_endPlayer, 'explosion');

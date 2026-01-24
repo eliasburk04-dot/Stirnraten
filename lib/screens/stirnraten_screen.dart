@@ -174,6 +174,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   bool _showSettingsPanel = false;
   Timer? _gameTimer;
   Timer? _countdownTimer;
+  Timer? _countdownIntroStopTimer;
   late final ValueNotifier<String> _timerText;
   late final ValueNotifier<String> _wordText;
   late final ValueNotifier<bool> _timerBlinkOn;
@@ -232,6 +233,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   void dispose() {
     _gameTimer?.cancel();
     _countdownTimer?.cancel();
+    _countdownIntroStopTimer?.cancel();
     _feedbackTimer?.cancel();
     _accelerometerSubscription?.cancel();
     _accelerometerSubscription = null;
@@ -340,17 +342,25 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _engine.startCountdown(words);
     });
     _syncCountdownUI();
-    context.read<SoundService>().playCountdown();
+    _startCountdownIntroSound();
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final shouldStart = _engine.tickCountdown();
       if (!shouldStart) {
         _syncCountdownUI();
-        context.read<SoundService>().playCountdown();
       } else {
         timer.cancel();
         _startGame();
       }
+    });
+  }
+
+  void _startCountdownIntroSound() {
+    _countdownIntroStopTimer?.cancel();
+    final sound = context.read<SoundService>();
+    sound.playCountdown();
+    _countdownIntroStopTimer = Timer(const Duration(seconds: 3), () {
+      sound.stopCountdown();
     });
   }
 
@@ -380,6 +390,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _feedbackColor = null; // Reset any lingering feedback
       _showFallbackButtons = !kIsWeb && !_sensorPermissionGranted;
     });
+    _countdownIntroStopTimer?.cancel();
+    context.read<SoundService>().stopCountdown();
     _syncGameUI();
     if (_snapshot.state == StirnratenGameState.result) {
       _endGame();
@@ -721,6 +733,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     if (_timerBlinkOn.value) {
       _timerBlinkOn.value = false;
     }
+    _countdownIntroStopTimer?.cancel();
+    context.read<SoundService>().stopCountdown();
 
     context.read<SoundService>().playEnd();
     

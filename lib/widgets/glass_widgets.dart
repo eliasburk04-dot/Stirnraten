@@ -8,17 +8,19 @@ class GlassBackdrop extends StatelessWidget {
   final double blurSigma;
   final BorderRadius borderRadius;
   final Widget child;
+  final bool enableBlur;
 
   const GlassBackdrop({
     super.key,
     required this.blurSigma,
     required this.borderRadius,
     required this.child,
+    this.enableBlur = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final content = blurSigma <= 0
+    final content = !enableBlur || blurSigma <= 0
         ? child
         : BackdropFilter(
             filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
@@ -51,7 +53,8 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 6, medium: 4, low: 0);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 4, medium: 3, low: 0) : 0.0;
     final shadowBlur = effects.shadowBlur(high: 24, medium: 16, low: 10);
     final borderRadius = BorderRadius.circular(24);
     final card = Container(
@@ -298,7 +301,8 @@ class GlassTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 6, medium: 4, low: 0);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 4, medium: 2, low: 0) : 0.0;
     final borderRadius = BorderRadius.circular(16);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,18 +374,22 @@ class GlassOverlay extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String? text;
+  final bool enableBlur;
 
   const GlassOverlay({
     super.key,
     required this.color,
     required this.icon,
     this.text,
+    this.enableBlur = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
-    final blurSigma = effects.blur(high: 4, medium: 2, low: 0);
+    final blurSigma = enableBlur && effects.allowBlur
+        ? effects.blur(high: 3, medium: 2, low: 0)
+        : 0.0;
     final overlay = Container(
       color: color.withAlpha(204),
       child: Center(

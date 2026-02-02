@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
+import 'services/purchase_service.dart';
 import 'services/sound_service.dart';
 import 'utils/effects_quality.dart';
 
@@ -22,6 +23,9 @@ class StirnratenApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => EffectsController()..startMonitoring(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => PurchaseService()..init(),
         ),
         Provider(
           create: (context) => SoundService(),

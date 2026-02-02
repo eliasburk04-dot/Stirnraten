@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/sound_service.dart';
 import '../utils/effects_quality.dart';
@@ -14,11 +15,12 @@ const Color _homePrimary = Color(0xFF21D4EA);
 const Color _homeBackgroundTop = Color(0xFFFFE277);
 const Color _homeBackgroundMid = Color(0xFFFFB866);
 const Color _homeBackgroundBottom = Color(0xFFF25B8F);
-const Color _homeCardSurface = Color(0xB3FFFFFF);
 const Color _homeCardBorder = Color(0x8CFFFFFF);
 const Color _homeText = Color(0xFF1E293B);
 const Color _homeMuted = Color(0xFF3B4A5A);
 const double _homeCardRadius = 48;
+const String _privacyUrl = 'https://stirnraten.vercel.app/legal/datenschutz';
+const String _imprintUrl = 'https://stirnraten.vercel.app/legal/impressum';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -115,6 +117,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Future<void> _openLegalUrl(String url) async {
+    final uri = Uri.parse(url);
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Link konnte nicht geoeffnet werden.'),
+        ),
+      );
+    }
+  }
+
+  void _openInfoSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return _InfoSheet(
+          onOpenPrivacy: () => _openLegalUrl(_privacyUrl),
+          onOpenImprint: () => _openLegalUrl(_imprintUrl),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const horizontalPadding = 24.0;
@@ -159,7 +190,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         children: [
                           FadeTransition(
                             opacity: _topFade,
-                            child: const _TopBar(),
+                            child: _TopBar(
+                              onInfoTap: _openInfoSheet,
+                            ),
                           ),
                           SizedBox(height: headerSpacing),
                           SlideTransition(
@@ -242,7 +275,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  final VoidCallback onInfoTap;
+
+  const _TopBar({
+    required this.onInfoTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -274,7 +311,10 @@ class _TopBar extends StatelessWidget {
             ],
           ),
         ),
-        const _TopIcon(icon: Icons.person_rounded),
+        _TopIcon(
+          icon: Icons.info_outline_rounded,
+          onTap: onInfoTap,
+        ),
       ],
     );
   }
@@ -282,8 +322,12 @@ class _TopBar extends StatelessWidget {
 
 class _TopIcon extends StatelessWidget {
   final IconData icon;
+  final VoidCallback onTap;
 
-  const _TopIcon({required this.icon});
+  const _TopIcon({
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -311,10 +355,17 @@ class _TopIcon extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(
-          icon,
-          size: 22,
-          color: _homeText.withValues(alpha: 0.8),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onTap,
+            child: Icon(
+              icon,
+              size: 22,
+              color: _homeText.withValues(alpha: 0.8),
+            ),
+          ),
         ),
       ),
     );
@@ -346,7 +397,15 @@ class _StartCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_homeCardRadius),
-          color: _homeCardSurface,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              _homeBackgroundTop.withValues(alpha: 0.95),
+              _homeBackgroundMid.withValues(alpha: 0.95),
+              _homeBackgroundBottom.withValues(alpha: 0.95),
+            ],
+          ),
           border: Border.all(color: _homeCardBorder, width: 1.2),
           boxShadow: [
             BoxShadow(
@@ -365,8 +424,8 @@ class _StartCard extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withValues(alpha: 0.35),
-                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.22),
+                      Colors.white.withValues(alpha: 0.08),
                     ],
                   ),
                 ),
@@ -819,6 +878,152 @@ class _AnimatedBackground extends StatelessWidget {
         final driftY = cos(t) * 10;
         return buildStack(driftX, driftY);
       },
+    );
+  }
+}
+
+class _InfoSheet extends StatelessWidget {
+  final VoidCallback onOpenPrivacy;
+  final VoidCallback onOpenImprint;
+
+  const _InfoSheet({
+    required this.onOpenPrivacy,
+    required this.onOpenImprint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10121B),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 26,
+              offset: const Offset(0, -8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Info & Rechtliches',
+                  style: GoogleFonts.fredoka(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                ),
+              ],
+            ),
+            Text(
+              'Hier findest du Datenschutzerklaerung und Impressum.',
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _InfoLinkTile(
+              title: 'Datenschutzerklaerung',
+              subtitle: 'Details zur Datenverarbeitung',
+              icon: Icons.privacy_tip_outlined,
+              onTap: onOpenPrivacy,
+            ),
+            const SizedBox(height: 10),
+            _InfoLinkTile(
+              title: 'Impressum',
+              subtitle: 'Anbieterkennzeichnung',
+              icon: Icons.gavel_outlined,
+              onTap: onOpenImprint,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoLinkTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _InfoLinkTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.nunito(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.nunito(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.open_in_new_rounded, color: Colors.white70, size: 18),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -10,14 +10,17 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../services/sound_service.dart';
 import '../services/custom_word_storage.dart';
 import '../services/game_settings_storage.dart';
+import '../services/purchase_service.dart';
 import '../engine/stirnraten_engine.dart';
 import '../engine/drinking_balance.dart';
 import '../utils/sensor_helper.dart';
 import '../utils/effects_quality.dart';
+import '../utils/premium_access.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
 import '../widgets/hud_timer.dart';
 import '../widgets/category_card.dart';
+import '../widgets/premium_paywall.dart';
 import '../widgets/results_list.dart';
 import '../widgets/settings_panel.dart';
 import '../theme/stirnraten_colors.dart';
@@ -260,6 +263,40 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isPremium = context.watch<PurchaseService>().isPremium;
+    if (isPremium) return;
+
+    var shouldUpdate = false;
+    final lockedSelected = _selectedCategories
+        .where(
+          (category) => PremiumAccess.isCategoryLocked(
+            category: category,
+            isPremium: isPremium,
+          ),
+        )
+        .toList();
+    if (lockedSelected.isNotEmpty) {
+      _selectedCategories.removeAll(lockedSelected);
+      shouldUpdate = true;
+    }
+
+    if (PremiumAccess.isModeLocked(
+      mode: _snapshot.selectedMode,
+      isPremium: isPremium,
+    )) {
+      _engine.setSelectedMode(GameMode.classic);
+      _settingsStorage.saveSelectedMode(GameMode.classic);
+      shouldUpdate = true;
+    }
+
+    if (shouldUpdate && mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_snapshot.state != StirnratenGameState.playing) return;
     if (state == AppLifecycleState.paused ||
@@ -272,6 +309,11 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Future<void> _openCustomWordsScreen() async {
+    final isPremium = context.read<PurchaseService>().isPremium;
+    if (!isPremium) {
+      _showPremiumPaywall();
+      return;
+    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -782,7 +824,10 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
   
   List<CategoryCardData> _buildCategoryItems() {
-    return StirnratenCategory.values.map((category) {
+    final ordered = List<StirnratenCategory>.from(StirnratenCategory.values);
+    ordered.remove(StirnratenCategory.ownWords);
+    ordered.add(StirnratenCategory.ownWords);
+    return ordered.map((category) {
       final title = StirnratenData.categoryNames[category] ?? category.name;
       final wordCount = StirnratenData.getWords(category).length;
       final subtitle = category == StirnratenCategory.ownWords
@@ -824,6 +869,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Widget _buildSetup() {
+    final isPremium = context.watch<PurchaseService>().isPremium;
     final filteredCategories = _filteredCategories;
     final selectedCount = _selectedCategories.length;
     const bottomBarHeight = 112.0;
@@ -874,10 +920,19 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                         final item = filteredCategories[index];
                         final isSelected =
                             _selectedCategories.contains(item.category);
+                        final isLocked = PremiumAccess.isCategoryLocked(
+                          category: item.category,
+                          isPremium: isPremium,
+                        );
                         return CategoryCard(
                           data: item,
                           isSelected: isSelected,
+                          isLocked: isLocked,
                           onTap: () {
+                            if (isLocked) {
+                              _showPremiumPaywall();
+                              return;
+                            }
                             if (item.isOwnWords) {
                               _openCustomWordsScreen();
                             } else {
@@ -919,6 +974,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                   setState(() => _engine.setSelectedMode(mode));
                   _settingsStorage.saveSelectedMode(mode);
                 },
+                isPremium: isPremium,
+                onPremiumTap: _showPremiumPaywall,
               ),
             ),
         ],
@@ -946,6 +1003,16 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   void _closeSettingsPanel() {
     if (!_showSettingsPanel) return;
     setState(() => _showSettingsPanel = false);
+  }
+
+  void _showPremiumPaywall() {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const PremiumPaywallSheet(),
+    );
   }
 
   List<Color> _getCategoryGradient(StirnratenCategory category) {

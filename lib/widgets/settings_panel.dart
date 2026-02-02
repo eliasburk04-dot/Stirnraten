@@ -10,6 +10,8 @@ class SettingsPanel extends StatelessWidget {
   final ValueChanged<int> onTimeChanged;
   final GameMode selectedMode;
   final ValueChanged<GameMode> onModeChanged;
+  final bool isPremium;
+  final VoidCallback onPremiumTap;
 
   const SettingsPanel({
     super.key,
@@ -17,6 +19,8 @@ class SettingsPanel extends StatelessWidget {
     required this.onTimeChanged,
     required this.selectedMode,
     required this.onModeChanged,
+    required this.isPremium,
+    required this.onPremiumTap,
   });
 
   @override
@@ -31,11 +35,26 @@ class SettingsPanel extends StatelessWidget {
       _SegmentedOption<int>(value: 150, label: '150s'),
     ];
 
-    const modeOptions = [
-      _SegmentedOption<GameMode>(value: GameMode.classic, label: 'Klassisch'),
-      _SegmentedOption<GameMode>(value: GameMode.suddenDeath, label: 'Sudden'),
-      _SegmentedOption<GameMode>(value: GameMode.hardcore, label: 'Hardcore'),
-      _SegmentedOption<GameMode>(value: GameMode.drinking, label: 'Trinkspiel'),
+    final modeOptions = [
+      const _SegmentedOption<GameMode>(
+        value: GameMode.classic,
+        label: 'Klassisch',
+      ),
+      _SegmentedOption<GameMode>(
+        value: GameMode.suddenDeath,
+        label: 'Sudden',
+        isLocked: !isPremium,
+      ),
+      _SegmentedOption<GameMode>(
+        value: GameMode.hardcore,
+        label: 'Hardcore',
+        isLocked: !isPremium,
+      ),
+      _SegmentedOption<GameMode>(
+        value: GameMode.drinking,
+        label: 'Trinkspiel',
+        isLocked: !isPremium,
+      ),
     ];
 
     return ConstrainedBox(
@@ -97,8 +116,9 @@ class SettingsPanel extends StatelessWidget {
               options: modeOptions,
               value: selectedMode,
               onChanged: onModeChanged,
+              onLockedTap: onPremiumTap,
             ),
-            if (selectedMode == GameMode.drinking) ...[
+            if (selectedMode == GameMode.drinking && isPremium) ...[
               const SizedBox(height: 10),
               Text(
                 'Optionaler Party-Modus. Bitte verantwortungsvoll.',
@@ -120,19 +140,26 @@ class SettingsPanel extends StatelessWidget {
 class _SegmentedOption<T> {
   final T value;
   final String label;
+  final bool isLocked;
 
-  const _SegmentedOption({required this.value, required this.label});
+  const _SegmentedOption({
+    required this.value,
+    required this.label,
+    this.isLocked = false,
+  });
 }
 
 class _SegmentedControl<T> extends StatelessWidget {
   final List<_SegmentedOption<T>> options;
   final T value;
   final ValueChanged<T> onChanged;
+  final VoidCallback? onLockedTap;
 
   const _SegmentedControl({
     required this.options,
     required this.value,
     required this.onChanged,
+    this.onLockedTap,
   });
 
   @override
@@ -141,16 +168,25 @@ class _SegmentedControl<T> extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: options.map((option) {
-        final selected = option.value == value;
+        final locked = option.isLocked;
+        final selected = option.value == value && !locked;
         final backgroundColor = selected
             ? StirnratenColors.categoryPrimary
-            : Colors.white.withValues(alpha: 0.7);
+            : Colors.white.withValues(alpha: locked ? 0.4 : 0.7);
         final textColor = selected
             ? StirnratenColors.categoryText
-            : StirnratenColors.categoryMuted.withValues(alpha: 0.75);
+            : StirnratenColors.categoryMuted.withValues(
+                alpha: locked ? 0.45 : 0.75,
+              );
 
         return GestureDetector(
-          onTap: () => onChanged(option.value),
+          onTap: () {
+            if (locked) {
+              onLockedTap?.call();
+              return;
+            }
+            onChanged(option.value);
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -163,14 +199,27 @@ class _SegmentedControl<T> extends StatelessWidget {
                     : Colors.white.withValues(alpha: 0.5),
               ),
             ),
-            child: Text(
-              option.label,
-              style: GoogleFonts.nunito(
-                color: textColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  option.label,
+                  style: GoogleFonts.nunito(
+                    color: textColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                if (locked) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.lock,
+                    size: 12,
+                    color: textColor,
+                  ),
+                ],
+              ],
             ),
           ),
         );

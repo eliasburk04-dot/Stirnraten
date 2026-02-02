@@ -34,12 +34,14 @@ class CategoryCardData {
 class CategoryCard extends StatefulWidget {
   final CategoryCardData data;
   final bool isSelected;
+  final bool isLocked;
   final VoidCallback onTap;
 
   const CategoryCard({
     super.key,
     required this.data,
     required this.isSelected,
+    this.isLocked = false,
     required this.onTap,
   });
 
@@ -61,16 +63,20 @@ class _CategoryCardState extends State<CategoryCard> {
     final effects = EffectsConfig.of(context);
     final glowBlur = effects.shadowBlur(high: 18, medium: 14, low: 8);
     final accent = widget.data.accentColor ?? StirnratenColors.categoryPrimary;
+    final isLocked = widget.isLocked;
+    final isSelected = widget.isSelected && !isLocked;
     final glowAlpha = effects.shadowAlpha(
-      high: widget.isSelected ? 0.22 : 0.1,
-      medium: widget.isSelected ? 0.16 : 0.06,
+      high: isSelected ? 0.22 : 0.1,
+      medium: isSelected ? 0.16 : 0.06,
       low: 0,
     );
-    final borderColor = widget.isSelected
+    final borderColor = isSelected
         ? accent.withValues(alpha: 0.8)
-        : StirnratenColors.categoryBorder;
-    final scale = _pressed ? 0.96 : (widget.isSelected ? 1.02 : 1.0);
-    final showGlow = widget.isSelected;
+        : (isLocked
+            ? StirnratenColors.categoryMuted.withValues(alpha: 0.45)
+            : StirnratenColors.categoryBorder);
+    final scale = _pressed ? 0.96 : (isSelected ? 1.02 : 1.0);
+    final showGlow = isSelected;
 
     return RepaintBoundary(
       child: GestureDetector(
@@ -124,17 +130,23 @@ class _CategoryCardState extends State<CategoryCard> {
                       accent: accent,
                     ),
                     const Spacer(),
-                    if (widget.data.isNsfw || widget.isSelected)
+                    if (widget.data.isNsfw || isSelected || isLocked)
                       Wrap(
                         spacing: 6,
                         children: [
+                          if (isLocked)
+                            const _CategoryBadge(
+                              label: 'PREMIUM',
+                              background: Color(0xFFF59E0B),
+                              textColor: Color(0xFF1F2937),
+                            ),
                           if (widget.data.isNsfw)
                             const _CategoryBadge(
                               label: '18+',
                               background: Color(0xFFB91C1C),
                               textColor: Colors.white,
                             ),
-                          if (widget.isSelected)
+                          if (isSelected)
                             const _CategoryBadge(
                               label: 'SELECTED',
                               background: StirnratenColors.categoryPrimary,

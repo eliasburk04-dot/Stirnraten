@@ -10,11 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stirnraten/main.dart';
 
 void main() {
-  testWidgets('Home screen shows Stirnraten entry point', (WidgetTester tester) async {
+  testWidgets('Home screen shows Stirnraten entry point',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const StirnratenApp());
     await tester.pump();
 
-    expect(find.text('PARTY MODUS'), findsOneWidget);
+    expect(find.text('PARTYMODUS'), findsOneWidget);
     expect(find.text('Runde starten'), findsOneWidget);
   });
 }

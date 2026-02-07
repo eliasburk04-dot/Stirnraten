@@ -67,17 +67,37 @@ class PremiumPaywallSheet extends StatelessWidget {
             const SizedBox(height: 16),
             const _FeatureRow(text: 'Alle Kategorien freischalten'),
             const _FeatureRow(text: 'Eigene Listen erstellen und spielen'),
-            const _FeatureRow(text: 'Sudden, Hardcore und Trinkspiel'),
+            const _FeatureRow(text: 'K.-o.-Modus, Schwer und Trinkspiel'),
             const SizedBox(height: 16),
+            Text(
+              'Produkt-ID: ${purchase.configuredProductIds.join(', ')}',
+              style: GoogleFonts.nunito(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: StirnratenColors.categoryMuted.withValues(alpha: 0.75),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (!storeAvailable && !isPremium)
               Text(
-                'Store aktuell nicht verfuegbar.',
+                'App Store aktuell nicht verfügbar. Prüfe App Store Connect, Sandbox-Login und In-App-Purchase-Setup.',
                 style: GoogleFonts.nunito(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Colors.amber.shade200,
                 ),
               ),
+            if (purchase.notFoundProductIds.isNotEmpty && !isPremium) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Nicht im App Store gefunden: ${purchase.notFoundProductIds.join(', ')}',
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber.shade200,
+                ),
+              ),
+            ],
             if (purchase.lastError != null && !isPremium) ...[
               const SizedBox(height: 8),
               Text(
@@ -87,6 +107,13 @@ class PremiumPaywallSheet extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Colors.redAccent,
                 ),
+              ),
+            ],
+            if (!isPremium) ...[
+              const SizedBox(height: 10),
+              _GhostButton(
+                label: 'App Store erneut prüfen',
+                onPressed: isBusy ? null : purchase.refreshProducts,
               ),
             ],
             const SizedBox(height: 16),
@@ -101,14 +128,14 @@ class PremiumPaywallSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _PrimaryButton(
-                label: 'Schliessen',
+                label: 'Schließen',
                 onPressed: () => Navigator.pop(context),
               ),
             ] else ...[
               _PrimaryButton(
                 label: 'Jetzt freischalten • ${purchase.priceLabel}',
                 onPressed: storeAvailable && !isBusy
-                    ? purchase.buyPremium
+                    ? () => purchase.buyPremium()
                     : null,
                 isBusy: isBusy,
               ),
@@ -116,9 +143,17 @@ class PremiumPaywallSheet extends StatelessWidget {
               _GhostButton(
                 label: 'Kauf wiederherstellen',
                 onPressed: storeAvailable && !isBusy
-                    ? purchase.restorePurchases
+                    ? () => purchase.restorePurchases()
                     : null,
               ),
+              if (purchase.debugUnlockAvailable) ...[
+                const SizedBox(height: 8),
+                _GhostButton(
+                  label: 'Test: Premium freischalten',
+                  onPressed:
+                      isBusy ? null : () => purchase.unlockPremiumForDebug(),
+                ),
+              ],
             ],
           ],
         ),

@@ -1,22 +1,27 @@
+import 'dart:async';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class SoundService {
-  // Dedizierte Player pro Sound für perfekte Performance
+  // Dedicated player per sound keeps replay latency low.
   late final AudioPlayer _correctPlayer;
   late final AudioPlayer _wrongPlayer;
   late final AudioPlayer _startPlayer;
   late final AudioPlayer _endPlayer;
   late final AudioPlayer _countdownPlayer;
   late final AudioPlayer _countdownStartPlayer;
-  
+  late final Map<AudioPlayer, String> _playerAssets;
+
+  final Set<AudioPlayer> _preparedSources = <AudioPlayer>{};
   bool _isMuted = false;
   bool _isInitialized = false;
+  Future<void>? _initFuture;
 
   // Volume settings - Correct dominant, Wrong softer
   static const double _volCorrect = 1.0;
-  static const double _volWrong = 0.7;  // Reduziert für softeren Feel
+  static const double _volWrong = 0.7;
   static const double _volStart = 0.8;
   static const double _volEnd = 0.75;
   static const double _volCountdown = 0.7;
@@ -29,12 +34,32 @@ class SoundService {
     _endPlayer = AudioPlayer();
     _countdownPlayer = AudioPlayer();
     _countdownStartPlayer = AudioPlayer();
-    _initAudioContext();
+    _playerAssets = <AudioPlayer, String>{
+      _correctPlayer: 'sounds/correct.wav',
+      _wrongPlayer: 'sounds/wrong.wav',
+      _startPlayer: 'sounds/start.wav',
+      _endPlayer: 'sounds/end.wav',
+      _countdownPlayer: 'sounds/countdown.wav',
+      _countdownStartPlayer: 'sounds/countdown_start.wav',
+    };
+    unawaited(ensureInitialized());
+  }
+
+  Future<void> ensureInitialized() {
+    if (_isInitialized) {
+      return Future<void>.value();
+    }
+    final inFlight = _initFuture;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final future = _initAudioContext();
+    _initFuture = future;
+    return future;
   }
 
   Future<void> _initAudioContext() async {
     try {
-      // Configure all players for low-latency mode (critical for mobile)
       final players = [
         _correctPlayer,
         _wrongPlayer,
@@ -43,66 +68,87 @@ class SoundService {
         _countdownPlayer,
         _countdownStartPlayer,
       ];
-      
+
       for (final player in players) {
         await player.setReleaseMode(ReleaseMode.stop);
-        
-        // Mobile-specific: Set audio context to low latency
         if (!kIsWeb) {
           await player.setPlayerMode(PlayerMode.lowLatency);
         }
       }
 
-      // Preload all sounds for instant playback (critical for mobile)
-      await _preloadSounds();
-      
-      _isInitialized = true;
-      
-      if (kDebugMode) {
-        debugPrint('🔊 SoundService: Initialized with preloaded audio');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ SoundService init error: $e');
-      }
-    }
-  }
-
-  Future<void> _preloadSounds() async {
-    try {
-      // Preload into memory for zero-latency playback
-      await Future.wait([
-        _correctPlayer.setSource(AssetSource('sounds/correct.wav')),
-        _wrongPlayer.setSource(AssetSource('sounds/wrong.wav')),
-        _startPlayer.setSource(AssetSource('sounds/start.wav')),
-        _endPlayer.setSource(AssetSource('sounds/end.wav')),
-        _countdownPlayer.setSource(AssetSource('sounds/countdown.wav')),
-        _countdownStartPlayer.setSource(AssetSource('sounds/countdown_start.wav')),
-      ]);
-      
-      // Set volumes once
       await _correctPlayer.setVolume(_volCorrect);
       await _wrongPlayer.setVolume(_volWrong);
       await _startPlayer.setVolume(_volStart);
       await _endPlayer.setVolume(_volEnd);
       await _countdownPlayer.setVolume(_volCountdown);
       await _countdownStartPlayer.setVolume(_volCountdownStart);
-      
+
+      // Preload critical in-game sounds first and delay the rest.
+      await _preloadCoreSounds();
+      _scheduleSecondaryPreload();
+
+      _isInitialized = true;
+
       if (kDebugMode) {
-        debugPrint('✅ All sounds preloaded');
+        debugPrint('🔊 SoundService: Mit gestuftem Vorladen initialisiert');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Preload error: $e');
+        debugPrint('⚠️ SoundService-Initialisierungsfehler: $e');
       }
+    } finally {
+      _initFuture = null;
     }
+  }
+
+  Future<void> _preparePlayerSource(AudioPlayer player) async {
+    if (_preparedSources.contains(player)) {
+      return;
+    }
+    final asset = _playerAssets[player];
+    if (asset == null) {
+      return;
+    }
+    await player.setSource(AssetSource(asset));
+    _preparedSources.add(player);
+  }
+
+  Future<void> _preloadCoreSounds() async {
+    await Future.wait([
+      _preparePlayerSource(_correctPlayer),
+      _preparePlayerSource(_wrongPlayer),
+      _preparePlayerSource(_startPlayer),
+    ]);
+    if (kDebugMode) {
+      debugPrint('✅ Kernsounds vorgeladen');
+    }
+  }
+
+  void _scheduleSecondaryPreload() {
+    Future<void>.delayed(const Duration(milliseconds: 1500), () async {
+      try {
+        await Future.wait([
+          _preparePlayerSource(_endPlayer),
+          _preparePlayerSource(_countdownPlayer),
+          _preparePlayerSource(_countdownStartPlayer),
+        ]);
+        if (kDebugMode) {
+          debugPrint('✅ Zusätzliche Sounds vorgeladen');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ Fehler beim zusätzlichen Vorladen: $e');
+        }
+      }
+    });
   }
 
   /// Call this from a user gesture (e.g. button click) to unlock audio on Web
   Future<void> unlock() async {
-    if (kIsWeb && !_isInitialized) {
-      // Play silent sound to unlock audio context on web
+    await ensureInitialized();
+    if (kIsWeb) {
       try {
+        await _preparePlayerSource(_startPlayer);
         await _startPlayer.setVolume(0.01);
         await _startPlayer.resume();
         await Future.delayed(const Duration(milliseconds: 100));
@@ -110,7 +156,7 @@ class SoundService {
         await _startPlayer.setVolume(_volStart);
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('Unlock error: $e');
+          debugPrint('Freischaltfehler: $e');
         }
       }
     }
@@ -133,20 +179,22 @@ class SoundService {
   }
 
   Future<void> _playFromPlayer(AudioPlayer player, String soundName) async {
-    if (_isMuted || !_isInitialized) return;
+    if (_isMuted) return;
+    await ensureInitialized();
+    if (!_isInitialized) return;
 
     try {
-      // Stop and seek to beginning for instant replay
+      await _preparePlayerSource(player);
       await player.stop();
       await player.seek(Duration.zero);
       await player.resume();
-      
+
       if (kDebugMode) {
-        debugPrint('🔊 Playing: $soundName');
+        debugPrint('🔊 Spiele ab: $soundName');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Error playing $soundName: $e');
+        debugPrint('⚠️ Fehler beim Abspielen von $soundName: $e');
       }
     }
   }
@@ -173,7 +221,6 @@ class SoundService {
 
   Future<void> playTick() async {
     HapticFeedback.lightImpact();
-    // Use start player for tick for now
     await _playFromPlayer(_startPlayer, 'tick');
   }
 
@@ -221,9 +268,9 @@ class SoundService {
     _endPlayer.dispose();
     _countdownPlayer.dispose();
     _countdownStartPlayer.dispose();
-    
+
     if (kDebugMode) {
-      debugPrint('🔊 SoundService disposed');
+      debugPrint('🔊 SoundService freigegeben');
     }
   }
 }

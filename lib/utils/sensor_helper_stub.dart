@@ -1,1 +1,1 @@
-Future<bool> requestSensorPermission() async => false;
+Future<bool> requestSensorPermission() async => true;

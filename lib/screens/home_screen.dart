@@ -126,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Link konnte nicht geoeffnet werden.'),
+          content: Text('Link konnte nicht geöffnet werden.'),
         ),
       );
     }
@@ -170,100 +170,109 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                final maxWidth = min(constraints.maxWidth, 420.0);
-                final availableHeight = constraints.maxHeight;
-                final cardHeight =
-                    (availableHeight * 0.5).clamp(320.0, 460.0);
-                final headerSpacing = availableHeight < 700 ? 16.0 : 22.0;
-                final footerSpacing = availableHeight < 700 ? 12.0 : 18.0;
+                  final maxWidth = min(constraints.maxWidth, 420.0);
+                  final availableHeight = constraints.maxHeight;
+                  final cardHeight =
+                      (availableHeight * 0.46).clamp(300.0, 420.0);
+                  final headerSpacing = availableHeight < 700 ? 16.0 : 22.0;
+                  final footerSpacing = availableHeight < 700 ? 12.0 : 18.0;
 
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: maxWidth),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                        vertical: verticalPadding,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          FadeTransition(
-                            opacity: _topFade,
-                            child: _TopBar(
-                              onInfoTap: _openInfoSheet,
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                          vertical: verticalPadding,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FadeTransition(
+                              opacity: _topFade,
+                              child: _TopBar(
+                                onInfoTap: _openInfoSheet,
+                              ),
                             ),
-                          ),
-                          SizedBox(height: headerSpacing),
-                          SlideTransition(
-                            position: _heroSlide,
-                            child: FadeTransition(
-                              opacity: _heroFade,
-                              child: SizedBox(
-                                height: cardHeight,
-                                child: _StartCard(
-                                  pulse: _pulse,
-                                  floatController: _bgController,
-                                  effects: effects,
-                                  enableMotion: enableMotion,
+                            SizedBox(height: headerSpacing),
+                            SlideTransition(
+                              position: _heroSlide,
+                              child: FadeTransition(
+                                opacity: _heroFade,
+                                child: SizedBox(
+                                  height: cardHeight,
+                                  child: _StartCard(
+                                    pulse: _pulse,
+                                    floatController: _bgController,
+                                    effects: effects,
+                                    enableMotion: enableMotion,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const Spacer(),
-                          SlideTransition(
-                            position: _ctaSlide,
-                            child: FadeTransition(
-                              opacity: _ctaFade,
-                              child: _StartButton(
-                                onPressed: _startGame,
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: footerSpacing),
-                          FadeTransition(
-                            opacity: _tipFade,
-                            child: Text.rich(
-                              TextSpan(
-                                text: 'Tipp: Kippen für ',
-                                style: GoogleFonts.nunito(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _homeText.withValues(alpha: 0.65),
+                            const Spacer(),
+                            SlideTransition(
+                              position: _ctaSlide,
+                              child: FadeTransition(
+                                opacity: _ctaFade,
+                                child: _StartButton(
+                                  onPressed: _startGame,
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: 'richtig',
-                                    style: GoogleFonts.nunito(
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF22C55E),
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: ', zurück für ',
-                                    style: GoogleFonts.nunito(
-                                      fontWeight: FontWeight.w600,
-                                      color: _homeText.withValues(alpha: 0.65),
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'passen',
-                                    style: GoogleFonts.nunito(
-                                      fontWeight: FontWeight.w700,
-                                      color: const Color(0xFFEF4444),
-                                    ),
-                                  ),
-                                  const TextSpan(text: '.'),
-                                ],
                               ),
-                              textAlign: TextAlign.center,
                             ),
-                          ),
-                        ],
+                            SizedBox(height: footerSpacing),
+                            FadeTransition(
+                              opacity: _tipFade,
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'Tipp: Kippen für ',
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _homeText.withValues(alpha: 0.82),
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.22),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: 'richtig',
+                                      style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF16A34A),
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: ', zurück für ',
+                                      style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.w700,
+                                        color:
+                                            _homeText.withValues(alpha: 0.82),
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'passen',
+                                      style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFFDC2626),
+                                      ),
+                                    ),
+                                    const TextSpan(text: '.'),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
+                  );
                 },
               ),
             ),
@@ -300,7 +309,7 @@ class _TopBar extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'PARTY GAME',
+                'PARTYSPIEL',
                 style: GoogleFonts.nunito(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
@@ -451,7 +460,7 @@ class _StartCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -463,13 +472,13 @@ class _StartCard extends StatelessWidget {
                       enableMotion: enableMotion,
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   Stack(
                     alignment: Alignment.center,
                     children: [
                       Container(
-                        width: 96,
-                        height: 96,
+                        width: 86,
+                        height: 86,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
@@ -484,7 +493,7 @@ class _StartCard extends StatelessWidget {
                         child: Icon(
                           Icons.smartphone_rounded,
                           color: Colors.white.withValues(alpha: 0.95),
-                          size: 42,
+                          size: 38,
                         ),
                       ),
                       Positioned(
@@ -497,23 +506,23 @@ class _StartCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 18),
                   Text(
                     'Setz das Handy\nan die Stirn.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.fredoka(
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.w700,
                       height: 1.2,
                       color: _homeText,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     'Das Team erklärt.\nDu rätst.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.nunito(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       height: 1.4,
                       color: _homeMuted,
@@ -649,7 +658,7 @@ class _ModePill extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            'PARTY MODUS',
+            'PARTYMODUS',
             style: GoogleFonts.nunito(
               fontSize: 11,
               fontWeight: FontWeight.w800,
@@ -693,15 +702,31 @@ class _StartButtonState extends State<_StartButton> {
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         child: Container(
-          height: 64,
+          height: 68,
           decoration: BoxDecoration(
-            color: _homePrimary,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF42E8FF),
+                Color(0xFF15CBE5),
+              ],
+            ),
             borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.55),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: _homePrimary.withValues(alpha: 0.4),
-                blurRadius: 26,
-                offset: const Offset(0, 12),
+                color: const Color(0xFF0891B2).withValues(alpha: 0.42),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.18),
+                blurRadius: 6,
+                offset: const Offset(0, -2),
               ),
             ],
           ),
@@ -713,19 +738,26 @@ class _StartButtonState extends State<_StartButton> {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.fredoka(
                   fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   color: _homeText,
-                  letterSpacing: 0.2,
+                  letterSpacing: 0.3,
                 ),
               ),
               Positioned(
                 right: 10,
                 child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: const BoxDecoration(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _homePrimary.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: const Icon(
                     Icons.play_arrow_rounded,
@@ -932,7 +964,7 @@ class _InfoSheet extends StatelessWidget {
               ],
             ),
             Text(
-              'Hier findest du Datenschutzerklaerung und Impressum.',
+              'Hier findest du Datenschutzerklärung und Impressum.',
               style: GoogleFonts.nunito(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -941,7 +973,7 @@ class _InfoSheet extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _InfoLinkTile(
-              title: 'Datenschutzerklaerung',
+              title: 'Datenschutzerklärung',
               subtitle: 'Details zur Datenverarbeitung',
               icon: Icons.privacy_tip_outlined,
               onTap: onOpenPrivacy,
@@ -1019,7 +1051,11 @@ class _InfoLinkTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.open_in_new_rounded, color: Colors.white70, size: 18),
+              const Icon(
+                Icons.open_in_new_rounded,
+                color: Colors.white70,
+                size: 18,
+              ),
             ],
           ),
         ),
@@ -1199,4 +1235,4 @@ class _DecorDiamond extends StatelessWidget {
       ),
     );
   }
-}
+}

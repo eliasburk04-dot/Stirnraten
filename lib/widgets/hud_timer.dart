@@ -33,7 +33,7 @@ class HudTimerRow extends StatelessWidget {
           },
         ),
         HudChip(
-          label: 'SCORE',
+          label: 'PUNKTE',
           value: '$score',
           alignEnd: true,
           inlineLabel: true,
@@ -63,10 +63,10 @@ class HudChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textAlign = alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final textAlign =
+        alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     const chipColor = Color(0xFFF6B62D);
-    final backgroundColor =
-        isBlinking ? const Color(0xFFEF4444) : chipColor;
+    final backgroundColor = isBlinking ? const Color(0xFFEF4444) : chipColor;
     final effects = EffectsConfig.of(context);
     final shadowBlur = effects.shadowBlur(high: 10, medium: 6, low: 0);
 

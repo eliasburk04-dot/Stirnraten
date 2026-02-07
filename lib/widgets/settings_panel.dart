@@ -42,12 +42,12 @@ class SettingsPanel extends StatelessWidget {
       ),
       _SegmentedOption<GameMode>(
         value: GameMode.suddenDeath,
-        label: 'Sudden',
+        label: 'K.-o.',
         isLocked: !isPremium,
       ),
       _SegmentedOption<GameMode>(
         value: GameMode.hardcore,
-        label: 'Hardcore',
+        label: 'Schwer',
         isLocked: !isPremium,
       ),
       _SegmentedOption<GameMode>(
@@ -60,25 +60,28 @@ class SettingsPanel extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 260),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: StirnratenColors.categoryGlass,
+          color: const Color(0xFFFDF3E8),
           borderRadius: BorderRadius.circular(categoryCardRadius),
-          border: Border.all(color: StirnratenColors.categoryBorder, width: 1.2),
-          gradient: LinearGradient(
+          border: Border.all(
+            color: const Color(0xFFF8E6D5),
+            width: 1.2,
+          ),
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.white.withValues(alpha: 0.7),
-              Colors.white.withValues(alpha: 0.45),
+              Color(0xFFFFF9F2),
+              Color(0xFFFCECDD),
             ],
           ),
           boxShadow: shadowBlur > 0
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: shadowBlur,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withValues(alpha: 0.14),
+                    blurRadius: shadowBlur + 4,
+                    offset: const Offset(0, 12),
                   ),
                 ]
               : null,
@@ -172,7 +175,7 @@ class _SegmentedControl<T> extends StatelessWidget {
         final selected = option.value == value && !locked;
         final backgroundColor = selected
             ? StirnratenColors.categoryPrimary
-            : Colors.white.withValues(alpha: locked ? 0.4 : 0.7);
+            : (locked ? const Color(0xFFEFE2D7) : const Color(0xFFF4E7DB));
         final textColor = selected
             ? StirnratenColors.categoryText
             : StirnratenColors.categoryMuted.withValues(
@@ -196,7 +199,7 @@ class _SegmentedControl<T> extends StatelessWidget {
               border: Border.all(
                 color: selected
                     ? StirnratenColors.categoryPrimary
-                    : Colors.white.withValues(alpha: 0.5),
+                    : const Color(0xFFE5D2C3),
               ),
             ),
             child: Row(
@@ -227,4 +230,3 @@ class _SegmentedControl<T> extends StatelessWidget {
     );
   }
 }
-

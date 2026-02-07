@@ -71,8 +71,8 @@ class EffectsController extends ChangeNotifier {
 
     if (kDebugMode) {
       debugPrint(
-        'Perf: frames=$_windowFrames slow=$_slowFrames '
-        'max=${_maxFrame.inMilliseconds}ms quality=$_quality',
+        'Leistung: Bilder=$_windowFrames langsam=$_slowFrames '
+        'max=${_maxFrame.inMilliseconds}ms qualität=$_quality',
       );
     }
 

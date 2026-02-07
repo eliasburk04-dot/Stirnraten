@@ -124,36 +124,45 @@ class _CategoryCardState extends State<CategoryCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _CategoryIconBadge(
                       icon: widget.data.icon,
                       accent: accent,
                     ),
-                    const Spacer(),
-                    if (widget.data.isNsfw || isSelected || isLocked)
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          if (isLocked)
-                            const _CategoryBadge(
-                              label: 'PREMIUM',
-                              background: Color(0xFFF59E0B),
-                              textColor: Color(0xFF1F2937),
-                            ),
-                          if (widget.data.isNsfw)
-                            const _CategoryBadge(
-                              label: '18+',
-                              background: Color(0xFFB91C1C),
-                              textColor: Colors.white,
-                            ),
-                          if (isSelected)
-                            const _CategoryBadge(
-                              label: 'SELECTED',
-                              background: StirnratenColors.categoryPrimary,
-                              textColor: StirnratenColors.categoryText,
-                            ),
-                        ],
+                    if (widget.data.isNsfw || isSelected || isLocked) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              if (isLocked)
+                                const _CategoryBadge(
+                                  label: 'PREMIUM',
+                                  background: Color(0xFFF59E0B),
+                                  textColor: Color(0xFF1F2937),
+                                ),
+                              if (widget.data.isNsfw)
+                                const _CategoryBadge(
+                                  label: '18+',
+                                  background: Color(0xFFB91C1C),
+                                  textColor: Colors.white,
+                                ),
+                              if (isSelected)
+                                const _CategoryBadge(
+                                  label: 'AUSGEWÄHLT',
+                                  background: StirnratenColors.categoryPrimary,
+                                  textColor: StirnratenColors.categoryText,
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -173,8 +182,8 @@ class _CategoryCardState extends State<CategoryCard> {
                     style: GoogleFonts.nunito(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color:
-                          StirnratenColors.categoryMuted.withValues(alpha: 0.75),
+                      color: StirnratenColors.categoryMuted
+                          .withValues(alpha: 0.75),
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -194,15 +203,15 @@ class _CategoryCardState extends State<CategoryCard> {
                         .toList(),
                   ),
                 ],
-                if (widget.data.progress != null || widget.data.difficulty != null)
-                  ...[
-                    const SizedBox(height: 12),
-                    _CategoryProgress(
-                      progress: widget.data.progress,
-                      difficulty: widget.data.difficulty,
-                      accent: accent,
-                    ),
-                  ],
+                if (widget.data.progress != null ||
+                    widget.data.difficulty != null) ...[
+                  const SizedBox(height: 12),
+                  _CategoryProgress(
+                    progress: widget.data.progress,
+                    difficulty: widget.data.difficulty,
+                    accent: accent,
+                  ),
+                ],
               ],
             ),
           ),

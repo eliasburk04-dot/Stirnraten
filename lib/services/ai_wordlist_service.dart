@@ -210,91 +210,145 @@ class HttpAIWordlistService implements AIWordlistService {
     request.validate();
     _enforceRateLimit();
 
-    final payload = <String, dynamic>{
-      'input': request.toJson(),
-      'instructions': _buildStrictPrompt(request),
-      'responseSchema': <String, dynamic>{
-        'type': 'object',
-        'required': <String>['title', 'language', 'items'],
-        'properties': <String, dynamic>{
-          'title': <String, dynamic>{'type': 'string'},
-          'language': <String, dynamic>{'type': 'string'},
-          'items': <String, dynamic>{
-            'type': 'array',
-            'items': <String, dynamic>{'type': 'string'},
+    // Groq sometimes returns duplicates/invalid items. To reliably hit the target count,
+    // we over-request and (if still short after normalization) fetch additional batches
+    // excluding already accepted terms.
+    final targetCount = request.count;
+    final rawPool = <String>[];
+    List<String> normalized = <String>[];
+    String? effectiveTitle;
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final askCount = _computeAskCount(
+        targetCount: targetCount,
+        currentValidCount: normalized.length,
+        attempt: attempt,
+      );
+
+      final payload = <String, dynamic>{
+        'input': <String, dynamic>{
+          ...request.toJson(),
+          'count': askCount,
+        },
+        'instructions': _buildStrictPrompt(
+          request,
+          countOverride: askCount,
+          excludeTerms: normalized,
+        ),
+        'responseSchema': <String, dynamic>{
+          'type': 'object',
+          'required': <String>['title', 'language', 'items'],
+          'properties': <String, dynamic>{
+            'title': <String, dynamic>{'type': 'string'},
+            'language': <String, dynamic>{'type': 'string'},
+            'items': <String, dynamic>{
+              'type': 'array',
+              'items': <String, dynamic>{'type': 'string'},
+            },
           },
         },
-      },
-    };
+      };
 
-    http.Response response;
-    try {
-      response = await _postJsonWithAuth(
-        uri: config.endpoint,
-        payload: payload,
-      );
-      if (response.statusCode == 401) {
-        final detail = _extractErrorDetail(response.body).toLowerCase();
-
-        // When switching Supabase projects (or after restores), a persisted token can be invalid
-        // for the current project and yields "Invalid JWT". In that case, reset and re-sign in.
-        final looksLikeInvalidJwt = detail.contains('invalid jwt') ||
-            detail.contains('invalid_jwt') ||
-            detail.contains('invalidjwttoken');
-
-        if (looksLikeInvalidJwt) {
-          await _hardResetSupabaseSession();
-        } else {
-          // Token can be stale (especially on cold start). Refresh once and retry.
-          await _refreshSupabaseSessionIfPossible();
-        }
-
-        response =
-            await _postJsonWithAuth(uri: config.endpoint, payload: payload);
+      http.Response response;
+      try {
+        response = await _postJsonWithSessionRecovery(payload: payload);
+      } on TimeoutException {
+        throw const AIWordlistException(
+          'KI-Anfrage Timeout. Bitte erneut versuchen.',
+        );
+      } catch (error) {
+        throw AIWordlistException('Netzwerkfehler bei KI-Anfrage: $error');
       }
-    } on TimeoutException {
-      throw const AIWordlistException(
-        'KI-Anfrage Timeout. Bitte erneut versuchen.',
+
+      if (response.statusCode == 429) {
+        throw const AIRateLimitException(
+          'Zu viele KI-Anfragen. Bitte kurz warten.',
+          Duration(seconds: 20),
+        );
+      }
+      if (response.statusCode == 401) {
+        final detail = _extractErrorDetail(response.body);
+        throw AIWordlistException(
+          'KI-Service nicht autorisiert (HTTP 401${detail.isEmpty ? '' : ': $detail'}). '
+          'Prüfe: Supabase Anonymous Auth ist aktiv, '
+          'AI_WORDLIST_ENDPOINT zeigt auf die Supabase Edge Function '
+          'und SUPABASE_ANON_KEY ist gesetzt.',
+        );
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final detail = _extractErrorDetail(response.body);
+        throw AIWordlistException(
+          'KI-Service Fehler (HTTP ${response.statusCode}${detail.isEmpty ? '' : ': $detail'}).',
+        );
+      }
+
+      final raw = parseAIResponse(response.body);
+      effectiveTitle ??= raw.title;
+      rawPool.addAll(raw.items);
+
+      // Allow <5 during filling; enforce count at the end.
+      normalized = WordlistNormalizer.normalize(
+        items: rawPool,
+        requestedCount: targetCount,
+        minValid: 0,
       );
-    } catch (error) {
-      throw AIWordlistException('Netzwerkfehler bei KI-Anfrage: $error');
+
+      if (normalized.length >= targetCount) {
+        break;
+      }
     }
 
-    if (response.statusCode == 429) {
-      throw const AIRateLimitException(
-        'Zu viele KI-Anfragen. Bitte kurz warten.',
-        Duration(seconds: 20),
-      );
-    }
-    if (response.statusCode == 401) {
-      final detail = _extractErrorDetail(response.body);
+    if (normalized.length < targetCount) {
       throw AIWordlistException(
-        'KI-Service nicht autorisiert (HTTP 401${detail.isEmpty ? '' : ': $detail'}). '
-        'Prüfe: Supabase Anonymous Auth ist aktiv, '
-        'AI_WORDLIST_ENDPOINT zeigt auf die Supabase Edge Function '
-        'und SUPABASE_ANON_KEY ist gesetzt.',
+        'Zu wenig valide Begriffe (${normalized.length}/$targetCount). '
+        'Bitte erneut generieren.',
       );
     }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final detail = _extractErrorDetail(response.body);
-      throw AIWordlistException(
-        'KI-Service Fehler (HTTP ${response.statusCode}${detail.isEmpty ? '' : ': $detail'}).',
-      );
-    }
-
-    final raw = parseAIResponse(response.body);
-    final normalized = WordlistNormalizer.normalize(
-      items: raw.items,
-      requestedCount: request.count,
-    );
 
     return AIWordlistResult(
       title: request.title?.trim().isNotEmpty == true
           ? request.title!.trim()
-          : raw.title,
+          : (effectiveTitle ??
+              '${request.topic.trim()} (${request.difficulty.name})'),
       language: request.language,
       items: normalized,
     );
+  }
+
+  static int _computeAskCount({
+    required int targetCount,
+    required int currentValidCount,
+    required int attempt,
+  }) {
+    final remaining = (targetCount - currentValidCount).clamp(0, targetCount);
+    if (attempt == 0) {
+      final buffer = (targetCount ~/ 2).clamp(10, 35);
+      return (targetCount + buffer).clamp(5, 100);
+    }
+    final followUp = remaining + 12;
+    return followUp.clamp(5, 100);
+  }
+
+  Future<http.Response> _postJsonWithSessionRecovery({
+    required Map<String, dynamic> payload,
+  }) async {
+    var response =
+        await _postJsonWithAuth(uri: config.endpoint, payload: payload);
+    if (response.statusCode != 401) return response;
+
+    final detail = _extractErrorDetail(response.body).toLowerCase();
+    final looksLikeInvalidJwt = detail.contains('invalid jwt') ||
+        detail.contains('invalid_jwt') ||
+        detail.contains('invalidjwttoken');
+
+    if (looksLikeInvalidJwt) {
+      await _hardResetSupabaseSession();
+    } else {
+      await _refreshSupabaseSessionIfPossible();
+    }
+
+    response = await _postJsonWithAuth(uri: config.endpoint, payload: payload);
+    return response;
   }
 
   Future<http.Response> _postJsonWithAuth({
@@ -555,9 +609,16 @@ class HttpAIWordlistService implements AIWordlistService {
     return filtered.join('\n').trim();
   }
 
-  static String _buildStrictPrompt(AIWordlistRequest request) {
+  static String _buildStrictPrompt(
+    AIWordlistRequest request, {
+    int? countOverride,
+    List<String> excludeTerms = const <String>[],
+  }) {
     final tagPart =
         request.styleTags.isEmpty ? 'none' : request.styleTags.join(', ');
+    final targetCount = countOverride ?? request.count;
+    final excludePart =
+        excludeTerms.isEmpty ? 'none' : excludeTerms.take(60).join(', ');
     return '''
 Generate a guessing-game wordlist.
 Return STRICT JSON only in this schema:
@@ -566,7 +627,7 @@ Rules:
 - language: ${request.language}
 - topic: ${request.topic}
 - difficulty: ${request.difficulty.name}
-- target_count: ${request.count}
+- target_count: $targetCount
 - style_tags: $tagPart
 - each item must be 1-3 words (no full sentences)
 - no duplicates (case-insensitive)
@@ -574,6 +635,8 @@ Rules:
 - no numbering or bullet prefixes
 - avoid NSFW, hate, insults
 - no hints unless explicitly requested
+- do not include any terms from: $excludePart
+- IMPORTANT: return at least target_count unique valid items (prefer exactly target_count)
 ''';
   }
 }

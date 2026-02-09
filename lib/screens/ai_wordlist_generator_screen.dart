@@ -27,7 +27,6 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   late final AIWordlistViewModel _vm;
   late final TextEditingController _topicController;
   late final TextEditingController _titleController;
-  late final TextEditingController _tagsController;
   final List<TextEditingController> _previewControllers =
       <TextEditingController>[];
 
@@ -50,19 +49,12 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
         if (_vm.title == next) return;
         setState(() => _vm.title = next);
       });
-    _tagsController = TextEditingController(text: _vm.tagsRaw)
-      ..addListener(() {
-        final next = _tagsController.text;
-        if (_vm.tagsRaw == next) return;
-        setState(() => _vm.tagsRaw = next);
-      });
   }
 
   @override
   void dispose() {
     _topicController.dispose();
     _titleController.dispose();
-    _tagsController.dispose();
     for (final controller in _previewControllers) {
       controller.dispose();
     }
@@ -252,20 +244,6 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                                       : null,
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 10),
-                            const _SectionLabel('Stil-Tags (optional)'),
-                            const SizedBox(height: 6),
-                            _GlassInputField(
-                              controller: _tagsController,
-                              hint: 'Bundesliga, EM, Kinderfreundlich',
-                              maxLines: 1,
-                            ),
-                            const SizedBox(height: 12),
-                            _HintsToggle(
-                              value: _vm.includeHints,
-                              onChanged: (value) =>
-                                  setState(() => _vm.includeHints = value),
                             ),
                             const SizedBox(height: 12),
                             if (_vm.state == AIWordlistUiState.loading)
@@ -516,55 +494,6 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _HintsToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _HintsToggle({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Kurze Hinweise',
-                style: GoogleFonts.nunito(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: StirnratenColors.categoryMuted,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Standard: aus',
-                style: GoogleFonts.nunito(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: StirnratenColors.categoryMuted.withValues(alpha: 0.75),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch.adaptive(
-          value: value,
-          activeThumbColor: StirnratenColors.categoryPrimary,
-          activeTrackColor:
-              StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
 class _SelectItem<T> {
   final T value;
   final String label;
@@ -614,7 +543,7 @@ class _GlassSelect<T> extends StatelessWidget {
                   Icons.expand_more_rounded,
                   color: StirnratenColors.categoryMuted,
                 ),
-                dropdownColor: const Color(0xFF1B1B22),
+                dropdownColor: const Color(0xFFF8F8FC),
                 style: GoogleFonts.nunito(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,

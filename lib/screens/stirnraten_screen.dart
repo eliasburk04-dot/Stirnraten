@@ -2264,20 +2264,6 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      if (_repository != null)
-                        Text(
-                          _authBusy
-                              ? 'Cloud-Sync wird vorbereitet ...'
-                              : (_isCloudAuthenticated
-                                  ? 'Cloud-Sync aktiv. Spieler sind automatisch angemeldet.'
-                                  : 'Cloud-Sync nicht aktiv. Aktiviere in Supabase: Authentication -> Providers -> Anonymous.'),
-                          style: GoogleFonts.nunito(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: StirnratenColors.categoryMuted,
-                          ),
-                        ),
-                      const SizedBox(height: 10),
                       _SecondaryPillButton(
                         label: 'Mit KI erstellen',
                         onTap: _openAIGenerator,
@@ -2639,11 +2625,9 @@ class _CustomListCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              list.source == WordListSource.ai
-                  ? 'In Supabase gespeichert'
-                  : list.lastPlayedAt == null
-                      ? 'Noch nie gespielt'
-                      : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
+              list.lastPlayedAt == null
+                  ? 'Noch nie gespielt'
+                  : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
               style: GoogleFonts.nunito(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

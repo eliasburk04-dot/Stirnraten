@@ -164,48 +164,48 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: _GlassSelect<AIWordlistLanguage>(
+                                  child: _GlassSegmentedControl<
+                                      AIWordlistLanguage>(
                                     label: 'Sprache',
                                     value: _vm.language == 'de'
                                         ? AIWordlistLanguage.de
                                         : AIWordlistLanguage.en,
                                     items: const [
-                                      _SelectItem(
+                                      _SegmentItem(
                                         value: AIWordlistLanguage.de,
                                         label: 'Deutsch',
                                       ),
-                                      _SelectItem(
+                                      _SegmentItem(
                                         value: AIWordlistLanguage.en,
-                                        label: 'English',
+                                        label: 'Englisch',
                                       ),
                                     ],
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _vm.language =
-                                            value == AIWordlistLanguage.de
-                                                ? 'de'
-                                                : 'en';
-                                      });
-                                    },
+                                    onChanged: (value) => setState(() {
+                                      _vm.language =
+                                          value == AIWordlistLanguage.de
+                                              ? 'de'
+                                              : 'en';
+                                    }),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: _GlassSelect<AIWordlistDifficulty>(
+                                  child: _GlassSegmentedControl<
+                                      AIWordlistDifficulty>(
                                     label: 'Schwierigkeit',
                                     value: _vm.difficulty,
                                     items: const [
-                                      _SelectItem(
+                                      _SegmentItem(
                                         value: AIWordlistDifficulty.easy,
-                                        label: 'Easy',
+                                        label: 'Leicht',
                                       ),
-                                      _SelectItem(
+                                      _SegmentItem(
                                         value: AIWordlistDifficulty.medium,
-                                        label: 'Medium',
+                                        label: 'Mittel',
                                       ),
-                                      _SelectItem(
+                                      _SegmentItem(
                                         value: AIWordlistDifficulty.hard,
-                                        label: 'Hard',
+                                        label: 'Schwer',
                                       ),
                                     ],
                                     onChanged: (value) =>
@@ -494,20 +494,20 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _SelectItem<T> {
+class _SegmentItem<T> {
   final T value;
   final String label;
 
-  const _SelectItem({required this.value, required this.label});
+  const _SegmentItem({required this.value, required this.label});
 }
 
-class _GlassSelect<T> extends StatelessWidget {
+class _GlassSegmentedControl<T> extends StatelessWidget {
   final String label;
   final T value;
-  final List<_SelectItem<T>> items;
+  final List<_SegmentItem<T>> items;
   final ValueChanged<T> onChanged;
 
-  const _GlassSelect({
+  const _GlassSegmentedControl({
     required this.label,
     required this.value,
     required this.items,
@@ -529,42 +529,82 @@ class _GlassSelect<T> extends StatelessWidget {
           enableBlur: effects.allowBlur,
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: StirnratenColors.categoryGlass,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: StirnratenColors.categoryBorder),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<T>(
-                value: value,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.expand_more_rounded,
-                  color: StirnratenColors.categoryMuted,
-                ),
-                dropdownColor: const Color(0xFFF8F8FC),
-                style: GoogleFonts.nunito(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: StirnratenColors.categoryText,
-                ),
-                items: items
-                    .map(
-                      (item) => DropdownMenuItem<T>(
-                        value: item.value,
-                        child: Text(item.label),
-                      ),
-                    )
-                    .toList(growable: false),
-                onChanged: (next) {
-                  if (next != null) onChanged(next);
-                },
-              ),
+            child: Row(
+              children: [
+                for (final item in items) ...[
+                  Expanded(
+                    child: _SegmentButton(
+                      label: item.label,
+                      selected: item.value == value,
+                      onTap: () => onChanged(item.value),
+                    ),
+                  ),
+                  if (item != items.last) const SizedBox(width: 6),
+                ],
+              ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SegmentButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SegmentButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white.withValues(alpha: 0.92)
+              : Colors.white.withValues(alpha: 0.60),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.75)
+                : Colors.white.withValues(alpha: 0.55),
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.nunito(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: StirnratenColors.categoryText,
+          ),
+        ),
+      ),
     );
   }
 }

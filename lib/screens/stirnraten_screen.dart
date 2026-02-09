@@ -2173,20 +2173,8 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
   Future<void> _confirmDelete(CustomWordList list) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Liste löschen'),
-        content: Text('"${list.title}" wirklich löschen?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
+      barrierDismissible: true,
+      builder: (context) => _DeleteConfirmDialog(listTitle: list.title),
     );
     if (shouldDelete == true) {
       if (list.source == WordListSource.ai && _repository != null) {
@@ -2760,6 +2748,112 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
+class _DeleteConfirmDialog extends StatelessWidget {
+  final String listTitle;
+
+  const _DeleteConfirmDialog({required this.listTitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 8, medium: 5, low: 0) : 0.0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: GlassBackdrop(
+        blurSigma: blurSigma,
+        enableBlur: effects.allowBlur,
+        borderRadius: BorderRadius.circular(26),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: StirnratenColors.categoryGlass,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: StirnratenColors.categoryBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 26,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Liste löschen',
+                      style: GoogleFonts.fredoka(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: StirnratenColors.categoryText,
+                      ),
+                    ),
+                  ),
+                  _HeaderIconButton(
+                    icon: Icons.close_rounded,
+                    onTap: () => Navigator.pop(context, false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '"$listTitle" wirklich löschen?',
+                style: GoogleFonts.nunito(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SecondaryPillButton(
+                      label: 'Abbrechen',
+                      onTap: () => Navigator.pop(context, false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DangerPillButton(
+                      label: 'Löschen',
+                      icon: Icons.delete_rounded,
+                      onTap: () => Navigator.pop(context, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PrimaryPillButton extends StatelessWidget {
   final String label;
   final IconData? icon;
@@ -2787,6 +2881,62 @@ class _PrimaryPillButton extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: StirnratenColors.categoryText, size: 20),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.fredoka(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DangerPillButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  const _DangerPillButton({
+    required this.label,
+    this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+    const danger = Color(0xFFEF4444);
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.5,
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: danger,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: danger.withValues(alpha: 0.30),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),

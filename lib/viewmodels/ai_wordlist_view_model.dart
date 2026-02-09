@@ -138,7 +138,7 @@ class AIWordlistViewModel extends ChangeNotifier {
 
       final saved = await repository.createList(
         title: title.trim().isEmpty
-            ? '${topic.trim()} (${difficulty.name})'
+            ? '${topic.trim()} (${_difficultyLabelDe(difficulty)})'
             : title.trim(),
         language: language,
         source: WordListSource.ai,
@@ -158,6 +158,17 @@ class AIWordlistViewModel extends ChangeNotifier {
       errorMessage = error.toString();
       notifyListeners();
       return null;
+    }
+  }
+
+  static String _difficultyLabelDe(AIWordlistDifficulty difficulty) {
+    switch (difficulty) {
+      case AIWordlistDifficulty.easy:
+        return 'Leicht';
+      case AIWordlistDifficulty.medium:
+        return 'Mittel';
+      case AIWordlistDifficulty.hard:
+        return 'Schwer';
     }
   }
 }

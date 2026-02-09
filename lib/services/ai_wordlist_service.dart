@@ -309,10 +309,21 @@ class HttpAIWordlistService implements AIWordlistService {
       title: request.title?.trim().isNotEmpty == true
           ? request.title!.trim()
           : (effectiveTitle ??
-              '${request.topic.trim()} (${request.difficulty.name})'),
+              '${request.topic.trim()} (${_difficultyLabelDe(request.difficulty)})'),
       language: request.language,
       items: normalized,
     );
+  }
+
+  static String _difficultyLabelDe(AIWordlistDifficulty difficulty) {
+    switch (difficulty) {
+      case AIWordlistDifficulty.easy:
+        return 'Leicht';
+      case AIWordlistDifficulty.medium:
+        return 'Mittel';
+      case AIWordlistDifficulty.hard:
+        return 'Schwer';
+    }
   }
 
   static int _computeAskCount({

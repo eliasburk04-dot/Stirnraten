@@ -5,8 +5,8 @@
 CLI-Migration liegt in:
 - `supabase/migrations/20260209170000_wordlists_ai.sql`
 
-Optional (manuell im SQL Editor):
-- `docs/supabase/migrations/20260209_wordlists_ai.sql`
+Manuell im SQL Editor:
+- Inhalt aus `supabase/migrations/20260209170000_wordlists_ai.sql` ausführen.
 
 CLI-Push:
 ```bash

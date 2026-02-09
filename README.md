@@ -49,8 +49,8 @@ vercel deploy --prebuilt
 
 ## KI-Wörterlisten
 - Setup und Supabase-Migration: `docs/ai_wordlist_setup.md`
-- Supabase SQL: `docs/supabase/migrations/20260209_wordlists_ai.sql`
-- Supabase Auth-Session (Apple Login) wird für Cloud-Listen verwendet.
+- Supabase SQL (CLI Migration): `supabase/migrations/20260209170000_wordlists_ai.sql`
+- Supabase Auth: Anonymous (kein Login im UI).
 
 ## Notes
 This project is platform-neutral and does not require any Replit-specific configuration.

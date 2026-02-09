@@ -101,12 +101,14 @@ class AIWordlistResponse {
 class AIWordlistApiConfig {
   final Uri endpoint;
   final String appToken;
+  final String supabaseAnonKey;
   final Duration timeout;
   final Duration minInterval;
 
   const AIWordlistApiConfig({
     required this.endpoint,
     required this.appToken,
+    required this.supabaseAnonKey,
     this.timeout = const Duration(seconds: 30),
     this.minInterval = const Duration(seconds: 2),
   });
@@ -114,8 +116,10 @@ class AIWordlistApiConfig {
   static AIWordlistApiConfig? fromEnvironment() {
     const endpointRaw = String.fromEnvironment('AI_WORDLIST_ENDPOINT');
     const tokenRaw = String.fromEnvironment('APP_TOKEN');
+    const supabaseAnonRaw = String.fromEnvironment('SUPABASE_ANON_KEY');
     final endpoint = endpointRaw.trim();
     final token = tokenRaw.trim();
+    final supabaseAnonKey = supabaseAnonRaw.trim();
     if (endpoint.isEmpty) {
       return null;
     }
@@ -123,7 +127,11 @@ class AIWordlistApiConfig {
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       return null;
     }
-    return AIWordlistApiConfig(endpoint: uri, appToken: token);
+    return AIWordlistApiConfig(
+      endpoint: uri,
+      appToken: token,
+      supabaseAnonKey: supabaseAnonKey,
+    );
   }
 }
 
@@ -221,17 +229,18 @@ class HttpAIWordlistService implements AIWordlistService {
 
     http.Response response;
     try {
-      final bearerToken = _resolveBearerToken();
-      response = await _client
-          .post(
-            config.endpoint,
-            headers: <String, String>{
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $bearerToken',
-            },
-            body: jsonEncode(payload),
-          )
-          .timeout(config.timeout);
+      response = await _postJsonWithAuth(
+        uri: config.endpoint,
+        payload: payload,
+      );
+      if (response.statusCode == 401) {
+        // Token can be stale (especially on cold start). Refresh once and retry.
+        await _refreshSupabaseSessionIfPossible();
+        response = await _postJsonWithAuth(
+          uri: config.endpoint,
+          payload: payload,
+        );
+      }
     } on TimeoutException {
       throw const AIWordlistException(
         'KI-Anfrage Timeout. Bitte erneut versuchen.',
@@ -246,9 +255,19 @@ class HttpAIWordlistService implements AIWordlistService {
         Duration(seconds: 20),
       );
     }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+    if (response.statusCode == 401) {
+      final detail = _extractErrorDetail(response.body);
       throw AIWordlistException(
-        'KI-Service Fehler (HTTP ${response.statusCode}).',
+        'KI-Service nicht autorisiert (HTTP 401${detail.isEmpty ? '' : ': $detail'}). '
+        'Prüfe: Supabase Anonymous Auth ist aktiv, '
+        'AI_WORDLIST_ENDPOINT zeigt auf die Supabase Edge Function '
+        'und SUPABASE_ANON_KEY ist gesetzt.',
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final detail = _extractErrorDetail(response.body);
+      throw AIWordlistException(
+        'KI-Service Fehler (HTTP ${response.statusCode}${detail.isEmpty ? '' : ': $detail'}).',
       );
     }
 
@@ -267,26 +286,101 @@ class HttpAIWordlistService implements AIWordlistService {
     );
   }
 
-  String _resolveBearerToken() {
+  Future<http.Response> _postJsonWithAuth({
+    required Uri uri,
+    required Map<String, dynamic> payload,
+  }) async {
+    final bearerToken = await _resolveBearerToken();
+    return await _client
+        .post(
+          uri,
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            if (config.supabaseAnonKey.trim().isNotEmpty)
+              'apikey': config.supabaseAnonKey.trim(),
+            'Authorization': 'Bearer $bearerToken',
+          },
+          body: jsonEncode(payload),
+        )
+        .timeout(config.timeout);
+  }
+
+  Future<String> _resolveBearerToken() async {
+    // If you're calling a Supabase Edge Function, always use the Supabase session JWT,
+    // even if APP_TOKEN is set (APP_TOKEN was only meant as a dev placeholder).
+    final endpointLooksLikeSupabase =
+        config.endpoint.host.toLowerCase().endsWith('.supabase.co') &&
+            config.endpoint.pathSegments.contains('functions');
+
     final appToken = config.appToken.trim();
-    if (appToken.isNotEmpty) {
+    if (!endpointLooksLikeSupabase && appToken.isNotEmpty) {
       return appToken;
     }
+
+    return await _resolveSupabaseBearerToken();
+  }
+
+  Future<String> _resolveSupabaseBearerToken() async {
     try {
-      final sessionToken =
-          Supabase.instance.client.auth.currentSession?.accessToken;
-      if (sessionToken != null && sessionToken.trim().isNotEmpty) {
-        return sessionToken;
+      final sb = Supabase.instance.client;
+      var token = sb.auth.currentSession?.accessToken;
+
+      if (token == null || token.trim().isEmpty) {
+        // "No login UI" flow: use Supabase Anonymous sign-in.
+        await sb.auth.signInAnonymously();
+        token = sb.auth.currentSession?.accessToken;
       }
+
+      if (token != null && token.trim().isNotEmpty) {
+        return token;
+      }
+    } on AuthException catch (error) {
+      final message = error.message.toLowerCase();
+      if (message.contains('anonymous') && message.contains('disabled')) {
+        throw const AIWordlistException(
+          'Supabase Anonymous Auth ist deaktiviert. '
+          'Aktiviere in Supabase: Authentication -> Providers -> Anonymous.',
+        );
+      }
+      throw AIWordlistException('Supabase Auth Fehler: ${error.message}');
     } catch (_) {
       // Supabase may not be initialized in some dev/test contexts.
     }
+
     throw const AIWordlistException(
-      'Keine Auth für KI-Endpunkt verfügbar. '
-      'Bitte sicherstellen, dass Supabase initialisiert ist und '
-      'Anonymous Auth aktiv ist (Cloud-Sync). '
-      'Alternativ APP_TOKEN nur für Dev setzen.',
+      'Keine Supabase Session vorhanden. '
+      'Bitte sicherstellen, dass SUPABASE_URL und SUPABASE_ANON_KEY gesetzt sind.',
     );
+  }
+
+  Future<void> _refreshSupabaseSessionIfPossible() async {
+    try {
+      final sb = Supabase.instance.client;
+      await sb.auth.refreshSession();
+    } on AuthException {
+      // ignore
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  static String _extractErrorDetail(String body) {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return '';
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map) {
+        final error = decoded['error']?.toString().trim();
+        if (error != null && error.isNotEmpty) return error;
+        final message = decoded['message']?.toString().trim();
+        if (message != null && message.isNotEmpty) return message;
+      }
+    } catch (_) {
+      // fall through to snippet
+    }
+    final snippet =
+        trimmed.length > 140 ? '${trimmed.substring(0, 140)}…' : trimmed;
+    return snippet.replaceAll(RegExp(r'\\s+'), ' ');
   }
 
   @override

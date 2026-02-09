@@ -55,3 +55,9 @@ app.*.map.json
 
 # Local-only Dart defines for Xcode "Prod" runs (publishable, but keep it out of git)
 ios/Flutter/dart_defines_prod.env
+
+# iOS / Xcode
+ios/Pods/
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
+**/*.xcuserstate

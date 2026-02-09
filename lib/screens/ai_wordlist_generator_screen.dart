@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/ai_wordlist_service.dart';
 import '../services/supabase_wordlist_repository.dart';
 import '../theme/stirnraten_colors.dart';
+import '../utils/effects_quality.dart';
+import '../widgets/glass_widgets.dart';
 import '../viewmodels/ai_wordlist_view_model.dart';
 
 class AIWordlistGeneratorScreen extends StatefulWidget {
@@ -22,6 +25,11 @@ class AIWordlistGeneratorScreen extends StatefulWidget {
 
 class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   late final AIWordlistViewModel _vm;
+  late final TextEditingController _topicController;
+  late final TextEditingController _titleController;
+  late final TextEditingController _tagsController;
+  final List<TextEditingController> _previewControllers =
+      <TextEditingController>[];
 
   @override
   void initState() {
@@ -30,12 +38,45 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
       aiService: widget.aiService,
       repository: widget.repository,
     );
+    _topicController = TextEditingController(text: _vm.topic)
+      ..addListener(() => _vm.topic = _topicController.text);
+    _titleController = TextEditingController(text: _vm.title)
+      ..addListener(() => _vm.title = _titleController.text);
+    _tagsController = TextEditingController(text: _vm.tagsRaw)
+      ..addListener(() => _vm.tagsRaw = _tagsController.text);
   }
 
   @override
   void dispose() {
+    _topicController.dispose();
+    _titleController.dispose();
+    _tagsController.dispose();
+    for (final controller in _previewControllers) {
+      controller.dispose();
+    }
     _vm.dispose();
     super.dispose();
+  }
+
+  void _syncPreviewControllers() {
+    final items = _vm.previewItems;
+    if (_previewControllers.length == items.length) {
+      for (var i = 0; i < items.length; i++) {
+        final text = items[i];
+        final controller = _previewControllers[i];
+        if (controller.text != text) {
+          controller.text = text;
+        }
+      }
+      return;
+    }
+
+    for (final controller in _previewControllers) {
+      controller.dispose();
+    }
+    _previewControllers
+      ..clear()
+      ..addAll(items.map((term) => TextEditingController(text: term)));
   }
 
   Future<void> _save() async {
@@ -57,234 +98,293 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     return AnimatedBuilder(
       animation: _vm,
       builder: (context, _) {
+        _syncPreviewControllers();
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('KI-Wörterliste'),
-            actions: [
-              TextButton(
-                onPressed: _vm.canSave ? _save : null,
-                child: const Text('Speichern'),
-              ),
-            ],
-          ),
-          body: ListView(
-            padding: const EdgeInsets.all(16),
+          body: Stack(
             children: [
-              _buildForm(),
-              const SizedBox(height: 12),
-              if (_vm.state == AIWordlistUiState.loading)
-                _LoadingCard(
-                  progress: _vm.progress,
-                  label: _vm.progressLabel,
+              const _CategoryBackground(),
+              SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                      child: Row(
+                        children: [
+                          _HeaderIconButton(
+                            icon: Icons.close_rounded,
+                            onTap: () => Navigator.pop(context),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'KI-Wörterliste',
+                              style: GoogleFonts.fredoka(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: StirnratenColors.categoryText,
+                              ),
+                            ),
+                          ),
+                          _PrimaryPillButton(
+                            label: 'Speichern',
+                            icon: Icons.check_rounded,
+                            onTap: _vm.canSave ? _save : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 6),
+                            const _SectionLabel('Thema'),
+                            const SizedBox(height: 6),
+                            _GlassInputField(
+                              controller: _topicController,
+                              hint: 'z.B. Fußball',
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 14),
+                            const _SectionLabel('Titel (optional)'),
+                            const SizedBox(height: 6),
+                            _GlassInputField(
+                              controller: _titleController,
+                              hint: 'z.B. Bundesliga Easy',
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _GlassSelect<AIWordlistLanguage>(
+                                    label: 'Sprache',
+                                    value: _vm.language == 'de'
+                                        ? AIWordlistLanguage.de
+                                        : AIWordlistLanguage.en,
+                                    items: const [
+                                      _SelectItem(
+                                        value: AIWordlistLanguage.de,
+                                        label: 'Deutsch',
+                                      ),
+                                      _SelectItem(
+                                        value: AIWordlistLanguage.en,
+                                        label: 'English',
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _vm.language =
+                                            value == AIWordlistLanguage.de
+                                                ? 'de'
+                                                : 'en';
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _GlassSelect<AIWordlistDifficulty>(
+                                    label: 'Schwierigkeit',
+                                    value: _vm.difficulty,
+                                    items: const [
+                                      _SelectItem(
+                                        value: AIWordlistDifficulty.easy,
+                                        label: 'Easy',
+                                      ),
+                                      _SelectItem(
+                                        value: AIWordlistDifficulty.medium,
+                                        label: 'Medium',
+                                      ),
+                                      _SelectItem(
+                                        value: AIWordlistDifficulty.hard,
+                                        label: 'Hard',
+                                      ),
+                                    ],
+                                    onChanged: (value) =>
+                                        setState(() => _vm.difficulty = value),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                const _SectionLabel('Anzahl Begriffe'),
+                                const Spacer(),
+                                _CountButton(
+                                  icon: Icons.remove_rounded,
+                                  onTap: _vm.count > 5
+                                      ? () => setState(() => _vm.count--)
+                                      : null,
+                                ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Text(
+                                    '${_vm.count}',
+                                    style: GoogleFonts.fredoka(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: StirnratenColors.categoryText,
+                                    ),
+                                  ),
+                                ),
+                                _CountButton(
+                                  icon: Icons.add_rounded,
+                                  onTap: _vm.count < 100
+                                      ? () => setState(() => _vm.count++)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            const _SectionLabel('Stil-Tags (optional)'),
+                            const SizedBox(height: 6),
+                            _GlassInputField(
+                              controller: _tagsController,
+                              hint: 'Bundesliga, EM, Kinderfreundlich',
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 12),
+                            _HintsToggle(
+                              value: _vm.includeHints,
+                              onChanged: (value) =>
+                                  setState(() => _vm.includeHints = value),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_vm.state == AIWordlistUiState.loading)
+                              _LoadingCard(
+                                progress: _vm.progress,
+                                label: _vm.progressLabel,
+                              ),
+                            if (_vm.errorMessage != null) ...[
+                              const SizedBox(height: 10),
+                              _ErrorCard(message: _vm.errorMessage!),
+                            ],
+                            if (_vm.previewItems.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              _buildPreview(),
+                            ],
+                            const SizedBox(height: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _SecondaryPillButton(
+                              label: 'Abbrechen',
+                              onTap: () => Navigator.pop(context),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _PrimaryPillButton(
+                              label: _vm.previewItems.isNotEmpty
+                                  ? 'Speichern'
+                                  : 'Generieren',
+                              icon: _vm.previewItems.isNotEmpty
+                                  ? Icons.check_rounded
+                                  : Icons.auto_awesome_rounded,
+                              onTap: _vm.previewItems.isNotEmpty
+                                  ? (_vm.canSave ? _save : null)
+                                  : (_vm.canGenerate
+                                      ? () => _vm.generate()
+                                      : null),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              if (_vm.errorMessage != null) ...[
-                const SizedBox(height: 10),
-                _ErrorCard(message: _vm.errorMessage!),
-              ],
-              if (_vm.previewItems.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildPreview(),
-              ],
-            ],
-          ),
-          bottomNavigationBar: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _vm.state == AIWordlistUiState.loading
-                          ? null
-                          : () => _vm.regenerate(),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Neu generieren'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _vm.canGenerate
-                          ? () {
-                              _vm.generate();
-                            }
-                          : null,
-                      icon: const Icon(Icons.auto_awesome_rounded),
-                      label: const Text('Generieren'),
-                    ),
-                  ),
-                ],
               ),
-            ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildForm() {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Thema'),
-            const SizedBox(height: 6),
-            TextFormField(
-              initialValue: _vm.topic,
-              decoration: const InputDecoration(hintText: 'z.B. Fußball'),
-              onChanged: (value) => _vm.topic = value,
-            ),
-            const SizedBox(height: 12),
-            const Text('Titel (optional)'),
-            const SizedBox(height: 6),
-            TextFormField(
-              initialValue: _vm.title,
-              decoration:
-                  const InputDecoration(hintText: 'z.B. Bundesliga Easy'),
-              onChanged: (value) => _vm.title = value,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _vm.language,
-                    decoration: const InputDecoration(labelText: 'Sprache'),
-                    items: const [
-                      DropdownMenuItem(value: 'de', child: Text('Deutsch')),
-                      DropdownMenuItem(value: 'en', child: Text('English')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        _vm.language = value;
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: DropdownButtonFormField<AIWordlistDifficulty>(
-                    initialValue: _vm.difficulty,
-                    decoration:
-                        const InputDecoration(labelText: 'Schwierigkeit'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: AIWordlistDifficulty.easy,
-                        child: Text('Easy'),
-                      ),
-                      DropdownMenuItem(
-                        value: AIWordlistDifficulty.medium,
-                        child: Text('Medium'),
-                      ),
-                      DropdownMenuItem(
-                        value: AIWordlistDifficulty.hard,
-                        child: Text('Hard'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        _vm.difficulty = value;
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Text('Anzahl Begriffe'),
-                const Spacer(),
-                IconButton(
-                  onPressed: _vm.count > 5
-                      ? () => setState(() => _vm.count = _vm.count - 1)
-                      : null,
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
-                Text(
-                  '${_vm.count}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                IconButton(
-                  onPressed: _vm.count < 100
-                      ? () => setState(() => _vm.count = _vm.count + 1)
-                      : null,
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            TextFormField(
-              initialValue: _vm.tagsRaw,
-              decoration: const InputDecoration(
-                labelText: 'Stil-Tags (optional)',
-                hintText: 'Bundesliga, EM, Kinderfreundlich',
-              ),
-              onChanged: (value) => _vm.tagsRaw = value,
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile.adaptive(
-              value: _vm.includeHints,
-              title: const Text('Kurze Hinweise einbeziehen'),
-              subtitle: const Text('Standard: aus'),
-              onChanged: (value) => setState(() => _vm.includeHints = value),
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildPreview() {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
+
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      enableBlur: effects.allowBlur,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: StirnratenColors.categoryGlass,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: StirnratenColors.categoryBorder),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Vorschau (${_vm.previewItems.length})',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                Text(
+                  'Vorschau (${_vm.previewItems.length})',
+                  style: GoogleFonts.fredoka(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: StirnratenColors.categoryText,
+                  ),
+                ),
+                const Spacer(),
+                _SmallPillButton(
+                  label: 'Neu',
+                  icon: Icons.refresh_rounded,
+                  onTap: _vm.state == AIWordlistUiState.loading
+                      ? null
+                      : () => _vm.regenerate(),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             ...List.generate(_vm.previewItems.length, (index) {
-              final term = _vm.previewItems[index];
+              final controller = _previewControllers[index];
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
-                        initialValue: term,
+                      child: _GlassInputField(
+                        controller: controller,
+                        hint: 'Begriff',
+                        maxLines: 1,
                         onChanged: (value) => _vm.updateItem(index, value),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => setState(() => _vm.removeItemAt(index)),
-                      icon: const Icon(Icons.delete_outline_rounded),
+                    const SizedBox(width: 8),
+                    _IconCircleButton(
+                      icon: Icons.delete_outline_rounded,
+                      onTap: () => setState(() => _vm.removeItemAt(index)),
                     ),
                   ],
                 ),
               );
             }),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: StirnratenColors.categoryPrimary,
+            if (_vm.previewItems.length < 5)
+              Text(
+                'Mindestens 5 Begriffe erforderlich.',
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFEF4444),
+                ),
               ),
-              onPressed: _vm.canSave ? _save : null,
-              icon: const Icon(Icons.save_rounded),
-              label: const Text('In Supabase speichern'),
-            ),
           ],
         ),
       ),
@@ -304,15 +404,43 @@ class _LoadingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = progress <= 0 ? null : progress.clamp(0.0, 1.0).toDouble();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      enableBlur: effects.allowBlur,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: StirnratenColors.categoryGlass,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: StirnratenColors.categoryBorder),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(value: value),
+            Text(
+              label,
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: StirnratenColors.categoryMuted,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: value,
+                minHeight: 10,
+                backgroundColor: Colors.white.withValues(alpha: 0.18),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  StirnratenColors.categoryPrimary,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -327,17 +455,547 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFFFFF1F2),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          message,
-          style: const TextStyle(
-            color: Color(0xFFB91C1C),
-            fontWeight: FontWeight.w700,
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      enableBlur: effects.allowBlur,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: const Color(0xFFEF4444).withValues(alpha: 0.35),
           ),
         ),
+        child: Text(
+          message,
+          style: GoogleFonts.nunito(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFFEF4444),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum AIWordlistLanguage { de, en }
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: GoogleFonts.nunito(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        color: StirnratenColors.categoryMuted,
+      ),
+    );
+  }
+}
+
+class _HintsToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _HintsToggle({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kurze Hinweise',
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: StirnratenColors.categoryMuted,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Standard: aus',
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: StirnratenColors.categoryMuted.withValues(alpha: 0.75),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Switch.adaptive(
+          value: value,
+          activeThumbColor: StirnratenColors.categoryPrimary,
+          activeTrackColor:
+              StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectItem<T> {
+  final T value;
+  final String label;
+
+  const _SelectItem({required this.value, required this.label});
+}
+
+class _GlassSelect<T> extends StatelessWidget {
+  final String label;
+  final T value;
+  final List<_SelectItem<T>> items;
+  final ValueChanged<T> onChanged;
+
+  const _GlassSelect({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel(label),
+        const SizedBox(height: 6),
+        GlassBackdrop(
+          blurSigma: blurSigma,
+          enableBlur: effects.allowBlur,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: StirnratenColors.categoryGlass,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: StirnratenColors.categoryBorder),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<T>(
+                value: value,
+                isExpanded: true,
+                icon: const Icon(
+                  Icons.expand_more_rounded,
+                  color: StirnratenColors.categoryMuted,
+                ),
+                dropdownColor: const Color(0xFF1B1B22),
+                style: GoogleFonts.nunito(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryText,
+                ),
+                items: items
+                    .map(
+                      (item) => DropdownMenuItem<T>(
+                        value: item.value,
+                        child: Text(item.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (next) {
+                  if (next != null) onChanged(next);
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CountButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _CountButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.75),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+          ),
+          child: Icon(icon, color: StirnratenColors.categoryText, size: 18),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallPillButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _SmallPillButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: StirnratenColors.categoryText),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: StirnratenColors.categoryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.75),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Icon(icon, color: StirnratenColors.categoryText, size: 22),
+      ),
+    );
+  }
+}
+
+class _PrimaryPillButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+
+  const _PrimaryPillButton({
+    required this.label,
+    this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.5,
+        child: Container(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: StirnratenColors.categoryPrimary,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: StirnratenColors.categoryPrimary.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: StirnratenColors.categoryText, size: 20),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.fredoka(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SecondaryPillButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _SecondaryPillButton({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.nunito(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: StirnratenColors.categoryText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconCircleButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _IconCircleButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.75),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+        child: Icon(icon, color: StirnratenColors.categoryText, size: 20),
+      ),
+    );
+  }
+}
+
+class _GlassInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final int? maxLines;
+  final ValueChanged<String>? onChanged;
+
+  const _GlassInputField({
+    required this.controller,
+    required this.hint,
+    this.maxLines,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 6, medium: 4, low: 0) : 0.0;
+    return GlassBackdrop(
+      blurSigma: blurSigma,
+      enableBlur: effects.allowBlur,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: StirnratenColors.categoryGlass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: StirnratenColors.categoryBorder),
+        ),
+        child: TextField(
+          controller: controller,
+          maxLines: maxLines,
+          onChanged: onChanged,
+          style: GoogleFonts.nunito(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: StirnratenColors.categoryText,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.nunito(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: StirnratenColors.categoryMuted.withValues(alpha: 0.6),
+            ),
+            border: InputBorder.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryBackground extends StatelessWidget {
+  const _CategoryBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurRadius = effects.shadowBlur(high: 95, medium: 70, low: 45);
+    final spreadRadius = effects.shadowBlur(high: 12, medium: 8, low: 5);
+    return RepaintBoundary(
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              StirnratenColors.categoryBackgroundTop,
+              StirnratenColors.categoryBackgroundMid,
+              StirnratenColors.categoryBackgroundBottom,
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -100,
+              right: -60,
+              child: _GlowOrb(
+                color: const Color(0xFFFFF1A6).withValues(alpha: 0.35),
+                size: 280,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+            Positioned(
+              bottom: -140,
+              left: -80,
+              child: _GlowOrb(
+                color: const Color(0xFFFF9FCE).withValues(alpha: 0.28),
+                size: 320,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+            Positioned(
+              top: 240,
+              left: -60,
+              child: _GlowOrb(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.18),
+                size: 220,
+                blurRadius: blurRadius,
+                spreadRadius: spreadRadius,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlowOrb extends StatelessWidget {
+  final Color color;
+  final double size;
+  final double blurRadius;
+  final double spreadRadius;
+
+  const _GlowOrb({
+    required this.color,
+    required this.size,
+    required this.blurRadius,
+    required this.spreadRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color,
+            blurRadius: blurRadius,
+            spreadRadius: spreadRadius,
+          ),
+        ],
       ),
     );
   }

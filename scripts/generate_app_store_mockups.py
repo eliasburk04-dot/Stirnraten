@@ -12,12 +12,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Tuple
+from urllib.request import urlopen
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS = Path.home() / "Downloads"
 OUT_DIR = ROOT / "docs" / "app_store_mockups"
+FONT_CACHE_DIR = ROOT / ".cache" / "mockup_fonts"
 
 SRC_HOME = DOWNLOADS / "IMG_4259.PNG"
 SRC_CATEGORIES = DOWNLOADS / "IMG_4260.PNG"
@@ -34,21 +36,111 @@ SRC_CUSTOM_WORDLISTS_NEW = DOWNLOADS / "IMG_4277.PNG"
 PORTRAIT_SIZE = (1290, 2796)
 LANDSCAPE_SIZE = (2796, 1290)
 
-FONT_BOLD_CANDIDATES = [
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-]
+FREDOKA_VAR_NAME = "Fredoka-Var.ttf"
+NUNITO_VAR_NAME = "Nunito-Var.ttf"
 
 # Remove iOS status bar area (time, signal, battery) from portrait screenshots.
 # Ratio is conservative to avoid cutting useful UI content.
 STATUS_BAR_CROP_RATIO = 0.055
 
+# Google Fonts raw (open-source). Download on demand into .cache so the script is repeatable.
+FONT_URLS = {
+    # Variable fonts (supported by Pillow / FreeType on macOS).
+    FREDOKA_VAR_NAME: "https://raw.githubusercontent.com/google/fonts/main/ofl/fredoka/Fredoka%5Bwdth,wght%5D.ttf",
+    NUNITO_VAR_NAME: "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf",
+}
 
-def load_font(size: int) -> ImageFont.ImageFont:
-    for path in FONT_BOLD_CANDIDATES:
-        p = Path(path)
-        if p.exists():
-            return ImageFont.truetype(str(p), size=size)
+
+def _download_font(name: str) -> Path | None:
+    url = FONT_URLS.get(name)
+    if not url:
+        return None
+    try:
+        FONT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        dest = FONT_CACHE_DIR / name
+        if dest.exists() and dest.stat().st_size > 10_000:
+            return dest
+        with urlopen(url, timeout=12) as r:
+            data = r.read()
+        if len(data) < 10_000:
+            return None
+        dest.write_bytes(data)
+        return dest
+    except Exception:
+        return None
+
+
+def _resolve_font_path(candidate: str) -> Path | None:
+    # Absolute path.
+    p = Path(candidate)
+    if p.is_absolute() and p.exists():
+        return p
+
+    # Cache.
+    cached = FONT_CACHE_DIR / candidate
+    if cached.exists():
+        return cached
+
+    # Try to download by known name.
+    downloaded = _download_font(candidate)
+    if downloaded is not None and downloaded.exists():
+        return downloaded
+
+    # Try common font dirs (in case user has it installed).
+    for base in (
+        Path("/System/Library/Fonts"),
+        Path("/System/Library/Fonts/Supplemental"),
+        Path("/Library/Fonts"),
+        Path.home() / "Library" / "Fonts",
+    ):
+        hit = next(base.glob(f"*{candidate.replace('.ttf','')}*"), None)
+        if hit and hit.exists():
+            return hit
+    return None
+
+
+def load_font_bold(size: int) -> ImageFont.ImageFont:
+    # Title font (Fredoka) with a bold weight.
+    try:
+        path = _resolve_font_path(FREDOKA_VAR_NAME)
+        if path and path.exists():
+            font = ImageFont.truetype(str(path), size=size)
+            if hasattr(font, "set_variation_by_axes"):
+                # axes: Weight (300..700), Width (75..125)
+                font.set_variation_by_axes([700, 100])
+            return font
+    except Exception:
+        pass
+
+    # Fallbacks.
+    for cand in (
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+    ):
+        path = _resolve_font_path(cand)
+        if path and path.exists():
+            return ImageFont.truetype(str(path), size=size)
+    return ImageFont.load_default()
+
+
+def load_font_regular(size: int) -> ImageFont.ImageFont:
+    # Subtitle font (Nunito) with a semibold-ish weight.
+    try:
+        path = _resolve_font_path(NUNITO_VAR_NAME)
+        if path and path.exists():
+            font = ImageFont.truetype(str(path), size=size)
+            if hasattr(font, "set_variation_by_axes"):
+                # axis: Weight (200..1000)
+                font.set_variation_by_axes([650])
+            return font
+    except Exception:
+        pass
+
+    # Fallbacks.
+    for cand in ("/System/Library/Fonts/Supplemental/Arial.ttf",):
+        path = _resolve_font_path(cand)
+        if path and path.exists():
+            return ImageFont.truetype(str(path), size=size)
     return ImageFont.load_default()
 
 
@@ -103,12 +195,55 @@ def preprocess_screenshot(img: Image.Image) -> Image.Image:
     return img.crop((0, crop_px, w, h))
 
 
-def draw_text_center(draw: ImageDraw.ImageDraw, text: str, y: int, size: int, color: Tuple[int, int, int], width: int) -> None:
-    font = load_font(size)
-    box = draw.textbbox((0, 0), text, font=font)
-    tw = box[2] - box[0]
-    x = (width - tw) // 2
-    draw.text((x, y), text, font=font, fill=color)
+def wrap_lines(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
+    words = text.split()
+    if not words:
+        return [text]
+    lines: list[str] = []
+    current: list[str] = []
+    for w in words:
+        candidate = " ".join(current + [w])
+        box = draw.textbbox((0, 0), candidate, font=font)
+        if box[2] - box[0] <= max_width or not current:
+            current.append(w)
+            continue
+        lines.append(" ".join(current))
+        current = [w]
+    if current:
+        lines.append(" ".join(current))
+    return lines
+
+
+def draw_text_center(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    y: int,
+    size: int,
+    color: Tuple[int, int, int],
+    width: int,
+    *,
+    max_width_ratio: float = 0.92,
+    is_title: bool = True,
+) -> None:
+    font = load_font_bold(size) if is_title else load_font_regular(size)
+    max_w = int(width * max_width_ratio)
+    lines = wrap_lines(draw, text, font, max_w)
+
+    # If still too wide (very long title), shrink a bit.
+    while len(lines) > 2 and size > 44:
+        size -= 4
+        font = load_font_bold(size) if is_title else load_font_regular(size)
+        lines = wrap_lines(draw, text, font, max_w)
+
+    line_h = int(size * (1.15 if is_title else 1.25))
+    for i, line in enumerate(lines[:2]):
+        box = draw.textbbox((0, 0), line, font=font)
+        tw = box[2] - box[0]
+        x = (width - tw) // 2
+        yy = y + i * line_h
+        # Subtle shadow for legibility on gradients.
+        draw.text((x, yy + 2), line, font=font, fill=(0, 0, 0, 40))
+        draw.text((x, yy), line, font=font, fill=color)
 
 
 def draw_phone(
@@ -152,33 +287,8 @@ def draw_phone(
     mdraw.rounded_rectangle((0, 0, screen_w, screen_h), radius=max(12, int(corner * 0.55)), fill=255)
     canvas.paste(screen, (sx0, sy0), mask)
 
-    # Dynamic Island pill (inside the screen area).
-    island_w = int(min(290, screen_w * 0.34))
-    island_h = int(min(46, max(34, screen_h * 0.035)))
-    island_x0 = sx0 + (screen_w - island_w) // 2
-    island_y0 = sy0 + int(screen_h * 0.02)
-    island_x1 = island_x0 + island_w
-    island_y1 = island_y0 + island_h
-    # Slight blur shadow for depth.
-    island_shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    isdraw = ImageDraw.Draw(island_shadow)
-    isdraw.rounded_rectangle(
-        (island_x0, island_y0 + 2, island_x1, island_y1 + 2),
-        radius=island_h // 2,
-        fill=(0, 0, 0, 140),
-    )
-    island_shadow = island_shadow.filter(ImageFilter.GaussianBlur(radius=6))
-    canvas.alpha_composite(island_shadow)
-    draw.rounded_rectangle(
-        (island_x0, island_y0, island_x1, island_y1),
-        radius=island_h // 2,
-        fill=(0, 0, 0, 235),
-    )
-    # Small lens dot for realism.
-    draw.ellipse(
-        (island_x1 - 34, island_y0 + 10, island_x1 - 20, island_y0 + 24),
-        fill=(28, 30, 36, 255),
-    )
+    # Note: We intentionally do NOT draw a notch/dynamic-island overlay in mockups,
+    # so the top area stays clean for marketing screenshots.
 
 
 def build_portrait_mockup(src: Path, title: str, subtitle: str, out_name: str) -> None:
@@ -187,8 +297,8 @@ def build_portrait_mockup(src: Path, title: str, subtitle: str, out_name: str) -
     add_soft_glow(bg, (1080, 600), 320, (255, 230, 160, 120))
 
     draw = ImageDraw.Draw(bg)
-    draw_text_center(draw, title, 120, 76, (24, 31, 53), PORTRAIT_SIZE[0])
-    draw_text_center(draw, subtitle, 222, 44, (53, 63, 89), PORTRAIT_SIZE[0])
+    draw_text_center(draw, title, 120, 76, (24, 31, 53), PORTRAIT_SIZE[0], is_title=True)
+    draw_text_center(draw, subtitle, 222, 44, (53, 63, 89), PORTRAIT_SIZE[0], is_title=False)
 
     shot = Image.open(src).convert("RGB")
     phone_w, phone_h = 1020, 2180
@@ -205,8 +315,8 @@ def build_portrait_gameplay_mockup(src: Path, out_name: str) -> None:
     add_soft_glow(bg, (150, 2400), 360, (255, 180, 100, 120))
     add_soft_glow(bg, (1060, 700), 300, (255, 255, 180, 120))
     draw = ImageDraw.Draw(bg)
-    draw_text_center(draw, "Action im Querformat", 120, 76, (255, 255, 255), PORTRAIT_SIZE[0])
-    draw_text_center(draw, "Neigen, raten, Punkte holen", 222, 44, (255, 244, 230), PORTRAIT_SIZE[0])
+    draw_text_center(draw, "Action im Querformat", 120, 76, (255, 255, 255), PORTRAIT_SIZE[0], is_title=True)
+    draw_text_center(draw, "Neigen, raten, Punkte holen", 222, 44, (255, 244, 230), PORTRAIT_SIZE[0], is_title=False)
 
     shot = Image.open(src).convert("RGB")
     phone_w, phone_h = 1140, 590
@@ -228,9 +338,9 @@ def build_landscape_gameplay_mockup(
     add_soft_glow(bg, (350, 1060), 290, (255, 255, 170, 110))
     add_soft_glow(bg, (2360, 250), 290, (255, 150, 130, 110))
     draw = ImageDraw.Draw(bg)
-    draw_text_center(draw, title, 72, 84, (255, 255, 255), LANDSCAPE_SIZE[0])
+    draw_text_center(draw, title, 72, 84, (255, 255, 255), LANDSCAPE_SIZE[0], is_title=True)
     if subtitle:
-      draw_text_center(draw, subtitle, 168, 44, (255, 244, 230), LANDSCAPE_SIZE[0])
+      draw_text_center(draw, subtitle, 168, 44, (255, 244, 230), LANDSCAPE_SIZE[0], is_title=False)
 
     shot = Image.open(src).convert("RGB")
     phone_w, phone_h = 2240, 980

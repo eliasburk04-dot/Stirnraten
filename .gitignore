@@ -61,3 +61,6 @@ ios/Pods/
 ios/Runner.xcworkspace/xcuserdata/
 ios/Runner.xcodeproj/xcuserdata/
 **/*.xcuserstate
+
+# Script caches
+.cache/

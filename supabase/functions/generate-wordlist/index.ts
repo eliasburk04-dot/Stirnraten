@@ -219,21 +219,26 @@ async function callGroqChatCompletion(args: {
   user: string;
   temperature: number;
 }): Promise<unknown> {
-  const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${args.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: args.model,
-      temperature: args.temperature,
-      messages: [
-        { role: "system", content: args.system },
-        { role: "user", content: args.user },
-      ],
-    }),
-  });
+  let resp: Response;
+  try {
+    resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${args.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: args.model,
+        temperature: args.temperature,
+        messages: [
+          { role: "system", content: args.system },
+          { role: "user", content: args.user },
+        ],
+      }),
+    });
+  } catch (e) {
+    return { __error: true, status: 0, body: String(e) };
+  }
 
   const text = await resp.text();
   if (resp.status === 429) {
@@ -317,7 +322,8 @@ Deno.serve(async (req: Request) => {
     return json(500, { error: "groq_api_key_missing" });
   }
 
-  const model = (Deno.env.get("GROQ_MODEL") ?? "llama-3.1-70b-versatile").trim();
+  // Keep a sensible default (models can be deprecated; allow overriding via secret).
+  const model = (Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
   const temperature = Number(Deno.env.get("GROQ_TEMPERATURE") ?? "0.4");
 
   const system = buildSystemPrompt(body);
@@ -347,7 +353,14 @@ Deno.serve(async (req: Request) => {
       return json(429, { error: "rate_limited" });
     }
     if ((raw as any)?.__error) {
-      return json(502, { error: "upstream_error" });
+      const status = Number((raw as any)?.status ?? 0);
+      const body = String((raw as any)?.body ?? "");
+      const detail = body.trim().slice(0, 240);
+      return json(502, {
+        error: "upstream_error",
+        upstream_status: Number.isFinite(status) ? status : 0,
+        detail,
+      });
     }
 
     const payload = extractAIResponsePayload(raw);
@@ -365,4 +378,3 @@ Deno.serve(async (req: Request) => {
 
   return json(500, { error: "unexpected" });
 });
-

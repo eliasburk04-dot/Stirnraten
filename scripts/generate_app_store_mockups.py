@@ -2,12 +2,10 @@
 """
 Generate App Store marketing mockups with frontal phone renders.
 
-Source screenshots are expected in ~/Downloads:
-- IMG_4259.PNG (home/start)
-- IMG_4260.PNG (categories)
-- IMG_4261.PNG (gameplay landscape)
-- IMG_4263.PNG (categories + settings sheet)
-- IMG_4265.PNG (result screen)
+This script is intentionally conservative: it keeps the 2 existing mockups in
+docs/app_store_mockups and generates exactly 3 additional portrait mockups from
+the latest screenshots in ~/Downloads, so the folder ends up with exactly 5
+images total.
 """
 
 from __future__ import annotations
@@ -27,6 +25,11 @@ SRC_GAMEPLAY = DOWNLOADS / "IMG_4261.PNG"
 SRC_GAMEPLAY_ALT = DOWNLOADS / "IMG_4267.PNG"
 SRC_SETTINGS = DOWNLOADS / "IMG_4263.PNG"
 SRC_RESULTS = DOWNLOADS / "IMG_4265.PNG"
+
+# New (Feb 2026) screenshots from current UI.
+SRC_CATEGORIES_SETTINGS_NEW = DOWNLOADS / "IMG_4275.PNG"
+SRC_AI_WORDLIST_NEW = DOWNLOADS / "IMG_4276.PNG"
+SRC_CUSTOM_WORDLISTS_NEW = DOWNLOADS / "IMG_4277.PNG"
 
 PORTRAIT_SIZE = (1290, 2796)
 LANDSCAPE_SIZE = (2796, 1290)
@@ -210,63 +213,59 @@ def build_landscape_gameplay_mockup(
 
 
 def assert_sources() -> None:
-    missing = [
-        str(p)
-        for p in (
-            SRC_HOME,
-            SRC_CATEGORIES,
-            SRC_GAMEPLAY,
-            SRC_GAMEPLAY_ALT,
-            SRC_SETTINGS,
-            SRC_RESULTS,
-        )
-        if not p.exists()
-    ]
+    missing = [str(p) for p in (SRC_CATEGORIES_SETTINGS_NEW, SRC_AI_WORDLIST_NEW, SRC_CUSTOM_WORDLISTS_NEW) if not p.exists()]
     if missing:
-        joined = "\n".join(missing)
-        raise FileNotFoundError(f"Missing screenshots:\n{joined}")
+        raise FileNotFoundError(
+            "Missing screenshots in ~/Downloads:\n"
+            + "\n".join(missing)
+            + "\n\nExport 3 iPhone portrait screenshots to Downloads as:\n"
+            + "- IMG_4275.PNG (Kategorien/Einstellungen)\n"
+            + "- IMG_4276.PNG (KI-Woerterliste)\n"
+            + "- IMG_4277.PNG (Eigene Woerter / gespeicherte Liste)\n"
+        )
+
+
+def prune_out_dir(keep: set[str]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for p in OUT_DIR.glob("*.png"):
+        if p.name not in keep:
+            p.unlink()
 
 
 def main() -> None:
     assert_sources()
-    build_portrait_mockup(
-        SRC_HOME,
-        "Schnell starten",
-        "Perfekt für jede Partyrunde",
+
+    # Keep the existing 2 images already checked in.
+    keep = {
         "01_startscreen_1290x2796.png",
-    )
+        "06_auswertung_1290x2796.png",
+        # Newly generated (this script):
+        "02_kategorien_1290x2796.png",
+        "03_ki_woerterlisten_1290x2796.png",
+        "04_eigene_listen_1290x2796.png",
+    }
+
     build_portrait_mockup(
-        SRC_CATEGORIES,
-        "Viele Kategorien",
-        "Finde sofort die passende Runde",
+        SRC_CATEGORIES_SETTINGS_NEW,
+        "Spiele jede Kategorie",
+        "Filme, Musik, Tiere und mehr",
         "02_kategorien_1290x2796.png",
     )
-    build_portrait_gameplay_mockup(
-        SRC_GAMEPLAY,
-        "03_gameplay_1290x2796.png",
+    build_portrait_mockup(
+        SRC_AI_WORDLIST_NEW,
+        "Erstelle Listen mit KI",
+        "Thema wählen, generieren, losspielen",
+        "03_ki_woerterlisten_1290x2796.png",
     )
     build_portrait_mockup(
-        SRC_SETTINGS,
-        "Einstellungen direkt im Spiel",
-        "Alles schnell anpassen",
-        "05_einstellungen_1290x2796.png",
+        SRC_CUSTOM_WORDLISTS_NEW,
+        "KI-Listen speichern",
+        "Deine Listen jederzeit wieder spielen",
+        "04_eigene_listen_1290x2796.png",
     )
-    build_portrait_mockup(
-        SRC_RESULTS,
-        "Runde beendet",
-        "Ergebnisse übersichtlich sehen",
-        "06_auswertung_1290x2796.png",
-    )
-    build_landscape_gameplay_mockup(
-        SRC_GAMEPLAY,
-        "04_gameplay_landscape_2796x1290.png",
-    )
-    build_landscape_gameplay_mockup(
-        SRC_GAMEPLAY_ALT,
-        "07_gameplay_havana_2796x1290.png",
-        title="Schnelle Runden",
-        subtitle="Ratebegriffe in Sekunden",
-    )
+
+    # Ensure we only keep the 5 final mockups.
+    prune_out_dir(keep)
     print(f"Mockups generated in: {OUT_DIR}")
 
 

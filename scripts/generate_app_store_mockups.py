@@ -127,8 +127,16 @@ def draw_phone(
     canvas.alpha_composite(shadow)
 
     draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle((x0, y0, x1, y1), radius=corner, fill=(18, 22, 30))
-    draw.rounded_rectangle((x0 + 3, y0 + 3, x1 - 3, y1 - 3), radius=corner - 3, outline=(78, 84, 96), width=2)
+    # iPhone-ish front render (modern flat sides + Dynamic Island).
+    # Not a real iPhone 17 CAD, but matches the current "iPhone" visual language.
+    draw.rounded_rectangle((x0, y0, x1, y1), radius=corner, fill=(16, 18, 22))
+    draw.rounded_rectangle((x0 + 2, y0 + 2, x1 - 2, y1 - 2), radius=corner - 2, outline=(96, 102, 112), width=2)
+    # Subtle rim highlight.
+    rim = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    rdraw = ImageDraw.Draw(rim)
+    rdraw.rounded_rectangle((x0 + 6, y0 + 6, x1 - 6, y1 - 6), radius=corner - 6, outline=(255, 255, 255, 28), width=2)
+    rim = rim.filter(ImageFilter.GaussianBlur(radius=1))
+    canvas.alpha_composite(rim)
 
     sx0 = x0 + bezel
     sy0 = y0 + bezel
@@ -144,11 +152,33 @@ def draw_phone(
     mdraw.rounded_rectangle((0, 0, screen_w, screen_h), radius=max(12, int(corner * 0.55)), fill=255)
     canvas.paste(screen, (sx0, sy0), mask)
 
-    # Speaker / camera hint for a "real phone" look.
-    top_cy = y0 + int(bezel * 0.58)
-    mid_x = (x0 + x1) // 2
-    draw.rounded_rectangle((mid_x - 80, top_cy - 7, mid_x + 80, top_cy + 7), radius=7, fill=(34, 37, 46))
-    draw.ellipse((mid_x + 96, top_cy - 8, mid_x + 112, top_cy + 8), fill=(34, 37, 46))
+    # Dynamic Island pill (inside the screen area).
+    island_w = int(min(290, screen_w * 0.34))
+    island_h = int(min(46, max(34, screen_h * 0.035)))
+    island_x0 = sx0 + (screen_w - island_w) // 2
+    island_y0 = sy0 + int(screen_h * 0.02)
+    island_x1 = island_x0 + island_w
+    island_y1 = island_y0 + island_h
+    # Slight blur shadow for depth.
+    island_shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    isdraw = ImageDraw.Draw(island_shadow)
+    isdraw.rounded_rectangle(
+        (island_x0, island_y0 + 2, island_x1, island_y1 + 2),
+        radius=island_h // 2,
+        fill=(0, 0, 0, 140),
+    )
+    island_shadow = island_shadow.filter(ImageFilter.GaussianBlur(radius=6))
+    canvas.alpha_composite(island_shadow)
+    draw.rounded_rectangle(
+        (island_x0, island_y0, island_x1, island_y1),
+        radius=island_h // 2,
+        fill=(0, 0, 0, 235),
+    )
+    # Small lens dot for realism.
+    draw.ellipse(
+        (island_x1 - 34, island_y0 + 10, island_x1 - 20, island_y0 + 24),
+        fill=(28, 30, 36, 255),
+    )
 
 
 def build_portrait_mockup(src: Path, title: str, subtitle: str, out_name: str) -> None:
@@ -246,21 +276,21 @@ def main() -> None:
     }
 
     build_portrait_mockup(
-        SRC_CATEGORIES_SETTINGS_NEW,
-        "Spiele jede Kategorie",
-        "Filme, Musik, Tiere und mehr",
+        SRC_CUSTOM_WORDLISTS_NEW,
+        "Erstelle eigene Kategorien mit KI",
+        "Deine Begriffe, jederzeit spielbereit",
         "02_kategorien_1290x2796.png",
     )
     build_portrait_mockup(
         SRC_AI_WORDLIST_NEW,
-        "Erstelle Listen mit KI",
-        "Thema wählen, generieren, losspielen",
+        "Erstelle eigene Listen mit KI oder per Hand",
+        "Schnell anpassen und losspielen",
         "03_ki_woerterlisten_1290x2796.png",
     )
     build_portrait_mockup(
-        SRC_CUSTOM_WORDLISTS_NEW,
-        "KI-Listen speichern",
-        "Deine Listen jederzeit wieder spielen",
+        SRC_CATEGORIES_SETTINGS_NEW,
+        "Entdecke spannende Modi",
+        "Klassisch, K.o., Schwer, Trinkspiel",
         "04_eigene_listen_1290x2796.png",
     )
 

@@ -142,7 +142,7 @@ class _CategoryCardState extends State<CategoryCard> {
                             children: [
                               if (isLocked)
                                 const _CategoryBadge(
-                                  label: 'PREMIUM',
+                                  label: 'GESPERRT',
                                   background: Color(0xFFF59E0B),
                                   textColor: Color(0xFF1F2937),
                                 ),

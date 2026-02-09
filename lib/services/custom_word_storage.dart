@@ -3,6 +3,30 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+enum WordListSource {
+  manual,
+  ai;
+
+  String get dbValue {
+    switch (this) {
+      case WordListSource.manual:
+        return 'manual';
+      case WordListSource.ai:
+        return 'ai';
+    }
+  }
+
+  static WordListSource fromStorageValue(String? value) {
+    switch (value?.trim().toLowerCase()) {
+      case 'ai':
+        return WordListSource.ai;
+      case 'manual':
+      default:
+        return WordListSource.manual;
+    }
+  }
+}
+
 class CustomWordList {
   final String id;
   final String title;
@@ -10,6 +34,8 @@ class CustomWordList {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? lastPlayedAt;
+  final String language;
+  final WordListSource source;
 
   const CustomWordList({
     required this.id,
@@ -18,6 +44,8 @@ class CustomWordList {
     required this.createdAt,
     required this.updatedAt,
     this.lastPlayedAt,
+    this.language = 'de',
+    this.source = WordListSource.manual,
   });
 
   int get wordCount => words.length;
@@ -29,6 +57,8 @@ class CustomWordList {
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? lastPlayedAt,
+    String? language,
+    WordListSource? source,
   }) {
     return CustomWordList(
       id: id ?? this.id,
@@ -37,6 +67,8 @@ class CustomWordList {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+      language: language ?? this.language,
+      source: source ?? this.source,
     );
   }
 
@@ -48,6 +80,8 @@ class CustomWordList {
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
       'lastPlayedAt': lastPlayedAt?.millisecondsSinceEpoch,
+      'language': language,
+      'source': source.dbValue,
     };
   }
 
@@ -69,6 +103,8 @@ class CustomWordList {
           : DateTime.fromMillisecondsSinceEpoch(
               (map['lastPlayedAt'] as num).toInt(),
             ),
+      language: map['language']?.toString() ?? 'de',
+      source: WordListSource.fromStorageValue(map['source']?.toString()),
     );
   }
 }
@@ -136,7 +172,12 @@ class CustomWordStorage {
     await _saveToPrefs(lists);
   }
 
-  CustomWordList buildNewList({required String title, required List<String> words}) {
+  CustomWordList buildNewList({
+    required String title,
+    required List<String> words,
+    String language = 'de',
+    WordListSource source = WordListSource.manual,
+  }) {
     final now = DateTime.now();
     return CustomWordList(
       id: _uuid.v4(),
@@ -145,6 +186,8 @@ class CustomWordStorage {
       createdAt: now,
       updatedAt: now,
       lastPlayedAt: null,
+      language: language,
+      source: source,
     );
   }
 
@@ -167,6 +210,8 @@ class CustomWordStorage {
           createdAt: now,
           updatedAt: now,
           lastPlayedAt: null,
+          language: 'de',
+          source: WordListSource.manual,
         );
       }).toList();
     } catch (_) {

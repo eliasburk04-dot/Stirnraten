@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+# Wrapper to strip problematic extended attributes (resource forks / provenance)
+# before invoking the real codesign. This avoids:
+# "resource fork, Finder information, or similar detritus not allowed"
+
+target="${@: -1}"
+
+if [ -n "${target:-}" ] && [ -e "$target" ]; then
+  # Best-effort: do not fail build if xattr can't read/remove something.
+  /usr/bin/xattr -cr "$target" >/dev/null 2>&1 || true
+
+  # If signing a binary inside a framework, also clean the framework dir.
+  case "$target" in
+    *.framework/*)
+      framework_dir="${target%/*.framework/*}.framework"
+      if [ -d "$framework_dir" ]; then
+        /usr/bin/xattr -cr "$framework_dir" >/dev/null 2>&1 || true
+      fi
+      ;;
+    *.app/*|*.appex/*)
+      # Clean container as well.
+      container="${target%/*}"
+      /usr/bin/xattr -cr "$container" >/dev/null 2>&1 || true
+      ;;
+  esac
+fi
+
+exec /usr/bin/codesign "$@"
+

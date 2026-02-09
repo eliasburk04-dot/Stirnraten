@@ -17,9 +17,3 @@ flutter --version
 flutter config --enable-web >/dev/null
 flutter pub get
 flutter build web --release
-
-# Keep legal pages available under stable URLs on the deployed domain.
-if [ -d "$ROOT_DIR/web/legal" ]; then
-  mkdir -p "$ROOT_DIR/build/web/legal"
-  cp -r "$ROOT_DIR/web/legal/." "$ROOT_DIR/build/web/legal/"
-fi

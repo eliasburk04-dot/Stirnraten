@@ -10,8 +10,6 @@ class SettingsPanel extends StatelessWidget {
   final ValueChanged<int> onTimeChanged;
   final GameMode selectedMode;
   final ValueChanged<GameMode> onModeChanged;
-  final bool isPremium;
-  final VoidCallback onPremiumTap;
 
   const SettingsPanel({
     super.key,
@@ -19,8 +17,6 @@ class SettingsPanel extends StatelessWidget {
     required this.onTimeChanged,
     required this.selectedMode,
     required this.onModeChanged,
-    required this.isPremium,
-    required this.onPremiumTap,
   });
 
   @override
@@ -40,20 +36,17 @@ class SettingsPanel extends StatelessWidget {
         value: GameMode.classic,
         label: 'Klassisch',
       ),
-      _SegmentedOption<GameMode>(
+      const _SegmentedOption<GameMode>(
         value: GameMode.suddenDeath,
         label: 'K.-o.',
-        isLocked: !isPremium,
       ),
-      _SegmentedOption<GameMode>(
+      const _SegmentedOption<GameMode>(
         value: GameMode.hardcore,
         label: 'Schwer',
-        isLocked: !isPremium,
       ),
-      _SegmentedOption<GameMode>(
+      const _SegmentedOption<GameMode>(
         value: GameMode.drinking,
         label: 'Trinkspiel',
-        isLocked: !isPremium,
       ),
     ];
 
@@ -119,9 +112,8 @@ class SettingsPanel extends StatelessWidget {
               options: modeOptions,
               value: selectedMode,
               onChanged: onModeChanged,
-              onLockedTap: onPremiumTap,
             ),
-            if (selectedMode == GameMode.drinking && isPremium) ...[
+            if (selectedMode == GameMode.drinking) ...[
               const SizedBox(height: 10),
               Text(
                 'Optionaler Party-Modus. Bitte verantwortungsvoll.',
@@ -143,12 +135,10 @@ class SettingsPanel extends StatelessWidget {
 class _SegmentedOption<T> {
   final T value;
   final String label;
-  final bool isLocked;
 
   const _SegmentedOption({
     required this.value,
     required this.label,
-    this.isLocked = false,
   });
 }
 
@@ -156,13 +146,11 @@ class _SegmentedControl<T> extends StatelessWidget {
   final List<_SegmentedOption<T>> options;
   final T value;
   final ValueChanged<T> onChanged;
-  final VoidCallback? onLockedTap;
 
   const _SegmentedControl({
     required this.options,
     required this.value,
     required this.onChanged,
-    this.onLockedTap,
   });
 
   @override
@@ -171,23 +159,16 @@ class _SegmentedControl<T> extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: options.map((option) {
-        final locked = option.isLocked;
-        final selected = option.value == value && !locked;
+        final selected = option.value == value;
         final backgroundColor = selected
             ? StirnratenColors.categoryPrimary
-            : (locked ? const Color(0xFFEFE2D7) : const Color(0xFFF4E7DB));
+            : const Color(0xFFF4E7DB);
         final textColor = selected
             ? StirnratenColors.categoryText
-            : StirnratenColors.categoryMuted.withValues(
-                alpha: locked ? 0.45 : 0.75,
-              );
+            : StirnratenColors.categoryMuted.withValues(alpha: 0.75);
 
         return GestureDetector(
           onTap: () {
-            if (locked) {
-              onLockedTap?.call();
-              return;
-            }
             onChanged(option.value);
           },
           child: AnimatedContainer(
@@ -214,14 +195,6 @@ class _SegmentedControl<T> extends StatelessWidget {
                     letterSpacing: 0.3,
                   ),
                 ),
-                if (locked) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.lock,
-                    size: 12,
-                    color: textColor,
-                  ),
-                ],
               ],
             ),
           ),

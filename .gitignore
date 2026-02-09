@@ -52,3 +52,6 @@ app.*.map.json
 .env.*
 .vercel
 .env*.local
+
+# Local-only Dart defines for Xcode "Prod" runs (publishable, but keep it out of git)
+ios/Flutter/dart_defines_prod.env

@@ -45,16 +45,12 @@ This validates:
 - Complete App Privacy questionnaire (data collection) in App Store Connect.
 - If no tracking is used, keep ATT disabled and answer accordingly.
 
-## 6) In-app purchase (if used)
+## 6) Monetarisierung (kostenloses Launch-Modell)
 
-- Create IAP products in App Store Connect.
-- Match product IDs in app config.
-- Submit IAP items with screenshots for review.
-- Configure build-time product IDs via:
-  - `--dart-define=IAP_PRODUCT_IDS=com.stirnraten.premium.lifetime`
-- Optional but recommended for production:
-  - `--dart-define=IAP_VERIFICATION_ENDPOINT=https://<your-api>/iap/verify`
-- Full setup details: `docs/premium_iap_setup.md`.
+- Keine In-App-Käufe konfigurieren.
+- In App Store Connect keine IAP-Produkte anhängen oder einreichen.
+- Preisstufe der App auf kostenlos setzen.
+- Metadata/Description ohne Hinweise auf Paywall oder Abo halten.
 
 ## 7) Assets
 

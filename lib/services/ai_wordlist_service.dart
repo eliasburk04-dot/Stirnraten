@@ -1,0 +1,459 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'wordlist_normalizer.dart';
+
+enum AIWordlistDifficulty { easy, medium, hard }
+
+class AIWordlistRequest {
+  final String topic;
+  final String language;
+  final AIWordlistDifficulty difficulty;
+  final int count;
+  final List<String> styleTags;
+  final bool includeHints;
+  final String? title;
+
+  const AIWordlistRequest({
+    required this.topic,
+    required this.language,
+    required this.difficulty,
+    required this.count,
+    this.styleTags = const <String>[],
+    this.includeHints = false,
+    this.title,
+  });
+
+  void validate() {
+    if (topic.trim().length < 2) {
+      throw const AIWordlistException('Thema muss mindestens 2 Zeichen haben.');
+    }
+    if (count < 5 || count > 100) {
+      throw const AIWordlistException('Anzahl muss zwischen 5 und 100 liegen.');
+    }
+    if (language != 'de' && language != 'en') {
+      throw const AIWordlistException('Sprache muss de oder en sein.');
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'topic': topic.trim(),
+      'language': language,
+      'difficulty': difficulty.name,
+      'count': count,
+      'styleTags': styleTags.where((tag) => tag.trim().isNotEmpty).toList(),
+      'includeHints': includeHints,
+      if (title != null && title!.trim().isNotEmpty) 'title': title!.trim(),
+    };
+  }
+}
+
+class AIWordlistResult {
+  final String title;
+  final String language;
+  final List<String> items;
+
+  const AIWordlistResult({
+    required this.title,
+    required this.language,
+    required this.items,
+  });
+}
+
+class AIWordlistResponse {
+  final String title;
+  final String language;
+  final List<String> items;
+
+  const AIWordlistResponse({
+    required this.title,
+    required this.language,
+    required this.items,
+  });
+
+  factory AIWordlistResponse.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    if (rawItems is! List) {
+      throw const FormatException('items fehlt oder ist kein Array.');
+    }
+
+    final title = json['title']?.toString().trim();
+    final language = json['language']?.toString().trim();
+    if (title == null || title.isEmpty) {
+      throw const FormatException('title fehlt.');
+    }
+    if (language == null || language.isEmpty) {
+      throw const FormatException('language fehlt.');
+    }
+
+    return AIWordlistResponse(
+      title: title,
+      language: language,
+      items: rawItems.map((entry) => entry.toString()).toList(growable: false),
+    );
+  }
+}
+
+class AIWordlistApiConfig {
+  final Uri endpoint;
+  final String appToken;
+  final Duration timeout;
+  final Duration minInterval;
+
+  const AIWordlistApiConfig({
+    required this.endpoint,
+    required this.appToken,
+    this.timeout = const Duration(seconds: 30),
+    this.minInterval = const Duration(seconds: 2),
+  });
+
+  static AIWordlistApiConfig? fromEnvironment() {
+    const endpointRaw = String.fromEnvironment('AI_WORDLIST_ENDPOINT');
+    const tokenRaw = String.fromEnvironment('APP_TOKEN');
+    final endpoint = endpointRaw.trim();
+    final token = tokenRaw.trim();
+    if (endpoint.isEmpty) {
+      return null;
+    }
+    final uri = Uri.tryParse(endpoint);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return null;
+    }
+    return AIWordlistApiConfig(endpoint: uri, appToken: token);
+  }
+}
+
+class AIWordlistException implements Exception {
+  final String message;
+
+  const AIWordlistException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class AIRateLimitException extends AIWordlistException {
+  final Duration retryAfter;
+
+  const AIRateLimitException(super.message, this.retryAfter);
+}
+
+enum AIWordlistProgressStage { requesting, parsing, normalizing, done }
+
+class AIWordlistProgress {
+  final AIWordlistProgressStage stage;
+  final double progress;
+  final String message;
+  final AIWordlistResult? result;
+
+  const AIWordlistProgress({
+    required this.stage,
+    required this.progress,
+    required this.message,
+    this.result,
+  });
+}
+
+abstract class AIWordlistService {
+  Future<List<String>> generateWordlist({required AIWordlistRequest request});
+
+  Future<AIWordlistResult> generateWordlistResult({
+    required AIWordlistRequest request,
+  });
+
+  Stream<AIWordlistProgress> generateWordlistStream({
+    required AIWordlistRequest request,
+  });
+}
+
+class HttpAIWordlistService implements AIWordlistService {
+  final AIWordlistApiConfig config;
+  final http.Client _client;
+
+  DateTime? _lastCallAt;
+
+  HttpAIWordlistService({
+    required this.config,
+    http.Client? client,
+  }) : _client = client ?? http.Client();
+
+  static HttpAIWordlistService? fromEnvironment() {
+    final config = AIWordlistApiConfig.fromEnvironment();
+    if (config == null) return null;
+    return HttpAIWordlistService(config: config);
+  }
+
+  @override
+  Future<List<String>> generateWordlist({
+    required AIWordlistRequest request,
+  }) async {
+    final result = await generateWordlistResult(request: request);
+    return result.items;
+  }
+
+  @override
+  Future<AIWordlistResult> generateWordlistResult({
+    required AIWordlistRequest request,
+  }) async {
+    request.validate();
+    _enforceRateLimit();
+
+    final payload = <String, dynamic>{
+      'input': request.toJson(),
+      'instructions': _buildStrictPrompt(request),
+      'responseSchema': <String, dynamic>{
+        'type': 'object',
+        'required': <String>['title', 'language', 'items'],
+        'properties': <String, dynamic>{
+          'title': <String, dynamic>{'type': 'string'},
+          'language': <String, dynamic>{'type': 'string'},
+          'items': <String, dynamic>{
+            'type': 'array',
+            'items': <String, dynamic>{'type': 'string'},
+          },
+        },
+      },
+    };
+
+    http.Response response;
+    try {
+      final bearerToken = _resolveBearerToken();
+      response = await _client
+          .post(
+            config.endpoint,
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $bearerToken',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(config.timeout);
+    } on TimeoutException {
+      throw const AIWordlistException(
+        'KI-Anfrage Timeout. Bitte erneut versuchen.',
+      );
+    } catch (error) {
+      throw AIWordlistException('Netzwerkfehler bei KI-Anfrage: $error');
+    }
+
+    if (response.statusCode == 429) {
+      throw const AIRateLimitException(
+        'Zu viele KI-Anfragen. Bitte kurz warten.',
+        Duration(seconds: 20),
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AIWordlistException(
+        'KI-Service Fehler (HTTP ${response.statusCode}).',
+      );
+    }
+
+    final raw = parseAIResponse(response.body);
+    final normalized = WordlistNormalizer.normalize(
+      items: raw.items,
+      requestedCount: request.count,
+    );
+
+    return AIWordlistResult(
+      title: request.title?.trim().isNotEmpty == true
+          ? request.title!.trim()
+          : raw.title,
+      language: request.language,
+      items: normalized,
+    );
+  }
+
+  String _resolveBearerToken() {
+    final appToken = config.appToken.trim();
+    if (appToken.isNotEmpty) {
+      return appToken;
+    }
+    try {
+      final sessionToken =
+          Supabase.instance.client.auth.currentSession?.accessToken;
+      if (sessionToken != null && sessionToken.trim().isNotEmpty) {
+        return sessionToken;
+      }
+    } catch (_) {
+      // Supabase may not be initialized in some dev/test contexts.
+    }
+    throw const AIWordlistException(
+      'Keine Auth für KI-Endpunkt verfügbar. '
+      'Bitte sicherstellen, dass Supabase initialisiert ist und '
+      'Anonymous Auth aktiv ist (Cloud-Sync). '
+      'Alternativ APP_TOKEN nur für Dev setzen.',
+    );
+  }
+
+  @override
+  Stream<AIWordlistProgress> generateWordlistStream({
+    required AIWordlistRequest request,
+  }) async* {
+    yield const AIWordlistProgress(
+      stage: AIWordlistProgressStage.requesting,
+      progress: 0.2,
+      message: 'KI wird angefragt ...',
+    );
+
+    AIWordlistResult result;
+    try {
+      yield const AIWordlistProgress(
+        stage: AIWordlistProgressStage.parsing,
+        progress: 0.55,
+        message: 'Antwort wird verarbeitet ...',
+      );
+      result = await generateWordlistResult(request: request);
+      yield const AIWordlistProgress(
+        stage: AIWordlistProgressStage.normalizing,
+        progress: 0.85,
+        message: 'Begriffe werden bereinigt ...',
+      );
+    } catch (_) {
+      rethrow;
+    }
+
+    yield AIWordlistProgress(
+      stage: AIWordlistProgressStage.done,
+      progress: 1,
+      message: 'Fertig.',
+      result: result,
+    );
+  }
+
+  void _enforceRateLimit() {
+    final now = DateTime.now();
+    final previous = _lastCallAt;
+    if (previous != null) {
+      final elapsed = now.difference(previous);
+      if (elapsed < config.minInterval) {
+        final retryAfter = config.minInterval - elapsed;
+        throw AIRateLimitException(
+          'Bitte ${retryAfter.inSeconds + 1}s warten.',
+          retryAfter,
+        );
+      }
+    }
+    _lastCallAt = now;
+  }
+
+  static AIWordlistResponse parseAIResponse(String body) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(body);
+    } catch (_) {
+      final extracted = _extractFirstJsonObject(body);
+      decoded = jsonDecode(extracted);
+    }
+    final payload = _extractPayload(decoded);
+    return AIWordlistResponse.fromJson(payload);
+  }
+
+  static Map<String, dynamic> _extractPayload(dynamic decoded) {
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('title') && decoded.containsKey('items')) {
+        return decoded;
+      }
+      for (final key in <String>['result', 'data', 'output']) {
+        final nested = decoded[key];
+        if (nested is Map<String, dynamic> &&
+            nested.containsKey('title') &&
+            nested.containsKey('items')) {
+          return nested;
+        }
+      }
+      final content = decoded['content'];
+      if (content is String) {
+        final parsed = jsonDecode(_extractFirstJsonObject(content));
+        if (parsed is Map<String, dynamic>) {
+          return parsed;
+        }
+      }
+
+      final choices = decoded['choices'];
+      if (choices is List && choices.isNotEmpty) {
+        final first = choices.first;
+        if (first is Map<String, dynamic>) {
+          final message = first['message'];
+          if (message is Map<String, dynamic>) {
+            final content = message['content'];
+            if (content is String) {
+              final parsed = jsonDecode(_extractFirstJsonObject(content));
+              if (parsed is Map<String, dynamic>) {
+                return parsed;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (decoded is String) {
+      final parsed = jsonDecode(_extractFirstJsonObject(decoded));
+      if (parsed is Map<String, dynamic>) {
+        return parsed;
+      }
+    }
+
+    throw const FormatException(
+      'KI-Antwort konnte nicht als JSON gelesen werden.',
+    );
+  }
+
+  static String _extractFirstJsonObject(String input) {
+    final trimmed = input.trim();
+    final withoutFence = _stripFence(trimmed);
+
+    final start = withoutFence.indexOf('{');
+    if (start < 0) {
+      throw const FormatException('Kein JSON-Objekt gefunden.');
+    }
+
+    var depth = 0;
+    for (var i = start; i < withoutFence.length; i++) {
+      final char = withoutFence[i];
+      if (char == '{') depth++;
+      if (char == '}') {
+        depth--;
+        if (depth == 0) {
+          return withoutFence.substring(start, i + 1);
+        }
+      }
+    }
+
+    throw const FormatException('Unvollständiges JSON-Objekt.');
+  }
+
+  static String _stripFence(String input) {
+    if (!input.startsWith('```')) return input;
+    final lines = input.split('\n');
+    final filtered =
+        lines.where((line) => !line.trim().startsWith('```')).toList();
+    return filtered.join('\n').trim();
+  }
+
+  static String _buildStrictPrompt(AIWordlistRequest request) {
+    final tagPart =
+        request.styleTags.isEmpty ? 'none' : request.styleTags.join(', ');
+    return '''
+Generate a guessing-game wordlist.
+Return STRICT JSON only in this schema:
+{"title":"...","language":"de|en","items":["term1","term2"]}
+Rules:
+- language: ${request.language}
+- topic: ${request.topic}
+- difficulty: ${request.difficulty.name}
+- target_count: ${request.count}
+- style_tags: $tagPart
+- each item must be 1-3 words (no full sentences)
+- no duplicates (case-insensitive)
+- no emojis
+- no numbering or bullet prefixes
+- avoid NSFW, hate, insults
+- no hints unless explicitly requested
+''';
+  }
+}

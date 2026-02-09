@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
-import 'services/purchase_service.dart';
 import 'services/sound_service.dart';
+import 'services/supabase_bootstrap.dart';
 import 'utils/effects_quality.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseBootstrap.initializeIfConfigured();
   runApp(const StirnratenApp());
 }
 
@@ -23,9 +24,6 @@ class StirnratenApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => EffectsController()..startMonitoring(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => PurchaseService()..init(),
         ),
         Provider(
           create: (context) => SoundService(),

@@ -19,8 +19,11 @@ const Color _homeCardBorder = Color(0x8CFFFFFF);
 const Color _homeText = Color(0xFF1E293B);
 const Color _homeMuted = Color(0xFF3B4A5A);
 const double _homeCardRadius = 48;
-const String _privacyUrl = 'https://stirnraten.vercel.app/legal/datenschutz';
-const String _imprintUrl = 'https://stirnraten.vercel.app/legal/impressum';
+const String _privacyPolicyUrl =
+    'https://burk-solutions-portfolio.vercel.app/stirnraten/datenschutz';
+const String _imprintUrl =
+    'https://burk-solutions-portfolio.vercel.app/stirnraten/impressum';
+const String _contactEmail = 'eliasburk04@gmail.com';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -117,17 +120,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _openLegalUrl(String url) async {
-    final uri = Uri.parse(url);
-    final opened = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-    if (!opened && mounted) {
+  Future<void> _openExternal(Uri uri) async {
+    final didOpen = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!didOpen && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Link konnte nicht geöffnet werden.'),
-        ),
+        const SnackBar(content: Text('Link konnte nicht geöffnet werden.')),
       );
     }
   }
@@ -139,8 +136,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       isScrollControlled: true,
       builder: (context) {
         return _InfoSheet(
-          onOpenPrivacy: () => _openLegalUrl(_privacyUrl),
-          onOpenImprint: () => _openLegalUrl(_imprintUrl),
+          onOpenPrivacy: () {
+            _openExternal(Uri.parse(_privacyPolicyUrl));
+          },
+          onOpenImprint: () {
+            _openExternal(Uri.parse(_imprintUrl));
+          },
+          onOpenEmail: () {
+            _openExternal(Uri.parse('mailto:$_contactEmail'));
+          },
         );
       },
     );
@@ -917,10 +921,12 @@ class _AnimatedBackground extends StatelessWidget {
 class _InfoSheet extends StatelessWidget {
   final VoidCallback onOpenPrivacy;
   final VoidCallback onOpenImprint;
+  final VoidCallback onOpenEmail;
 
   const _InfoSheet({
     required this.onOpenPrivacy,
     required this.onOpenImprint,
+    required this.onOpenEmail,
   });
 
   @override
@@ -974,16 +980,41 @@ class _InfoSheet extends StatelessWidget {
             const SizedBox(height: 14),
             _InfoLinkTile(
               title: 'Datenschutzerklärung',
-              subtitle: 'Details zur Datenverarbeitung',
+              subtitle: 'Auf der Burk-Solutions-Website',
               icon: Icons.privacy_tip_outlined,
-              onTap: onOpenPrivacy,
+              onTap: () {
+                Navigator.pop(context);
+                onOpenPrivacy();
+              },
             ),
             const SizedBox(height: 10),
             _InfoLinkTile(
               title: 'Impressum',
-              subtitle: 'Anbieterkennzeichnung',
+              subtitle: 'Auf der Burk-Solutions-Website',
               icon: Icons.gavel_outlined,
-              onTap: onOpenImprint,
+              onTap: () {
+                Navigator.pop(context);
+                onOpenImprint();
+              },
+            ),
+            const SizedBox(height: 10),
+            _InfoLinkTile(
+              title: 'Kontakt',
+              subtitle: _contactEmail,
+              icon: Icons.mail_outline_rounded,
+              onTap: () {
+                Navigator.pop(context);
+                onOpenEmail();
+              },
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Made by Burk Solutions',
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.white70,
+              ),
             ),
           ],
         ),

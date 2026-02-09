@@ -7,24 +7,25 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import '../services/ai_wordlist_service.dart';
+import '../services/supabase_auth_service.dart';
 import '../services/sound_service.dart';
 import '../services/custom_word_storage.dart';
 import '../services/game_settings_storage.dart';
-import '../services/purchase_service.dart';
+import '../services/supabase_wordlist_repository.dart';
 import '../engine/stirnraten_engine.dart';
 import '../engine/drinking_balance.dart';
 import '../utils/sensor_helper.dart';
 import '../utils/tilt_controller.dart';
 import '../utils/effects_quality.dart';
-import '../utils/premium_access.dart';
 import '../data/words.dart';
 import '../widgets/glass_widgets.dart';
 import '../widgets/hud_timer.dart';
 import '../widgets/category_card.dart';
-import '../widgets/premium_paywall.dart';
 import '../widgets/results_list.dart';
 import '../widgets/settings_panel.dart';
 import '../theme/stirnraten_colors.dart';
+import 'ai_wordlist_generator_screen.dart';
 
 const double _tiltNeutralZoneDeg = 10;
 const double _tiltTriggerDeg = 20;
@@ -130,40 +131,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final isPremium = context.watch<PurchaseService>().isPremium;
-    if (isPremium) return;
-
-    var shouldUpdate = false;
-    final lockedSelected = _selectedCategories
-        .where(
-          (category) => PremiumAccess.isCategoryLocked(
-            category: category,
-            isPremium: isPremium,
-          ),
-        )
-        .toList();
-    if (lockedSelected.isNotEmpty) {
-      _selectedCategories.removeAll(lockedSelected);
-      shouldUpdate = true;
-    }
-
-    if (PremiumAccess.isModeLocked(
-      mode: _snapshot.selectedMode,
-      isPremium: isPremium,
-    )) {
-      _engine.setSelectedMode(GameMode.classic);
-      _settingsStorage.saveSelectedMode(GameMode.classic);
-      shouldUpdate = true;
-    }
-
-    if (shouldUpdate && mounted) {
-      setState(() {});
-    }
-  }
-
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_snapshot.state != StirnratenGameState.playing) return;
     if (state == AppLifecycleState.paused ||
@@ -176,11 +143,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Future<void> _openCustomWordsScreen() async {
-    final isPremium = context.read<PurchaseService>().isPremium;
-    if (!isPremium) {
-      _showPremiumPaywall();
-      return;
-    }
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -726,7 +688,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Widget _buildSetup() {
-    final isPremium = context.watch<PurchaseService>().isPremium;
     final filteredCategories = _filteredCategories;
     final selectedCount = _selectedCategories.length;
     const bottomBarHeight = 112.0;
@@ -777,19 +738,10 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                         final item = filteredCategories[index];
                         final isSelected =
                             _selectedCategories.contains(item.category);
-                        final isLocked = PremiumAccess.isCategoryLocked(
-                          category: item.category,
-                          isPremium: isPremium,
-                        );
                         return CategoryCard(
                           data: item,
                           isSelected: isSelected,
-                          isLocked: isLocked,
                           onTap: () {
-                            if (isLocked) {
-                              _showPremiumPaywall();
-                              return;
-                            }
                             if (item.isOwnWords) {
                               _openCustomWordsScreen();
                             } else {
@@ -834,8 +786,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                   setState(() => _engine.setSelectedMode(mode));
                   _settingsStorage.saveSelectedMode(mode);
                 },
-                isPremium: isPremium,
-                onPremiumTap: _showPremiumPaywall,
               ),
             ),
         ],
@@ -863,17 +813,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   void _closeSettingsPanel() {
     if (!_showSettingsPanel) return;
     setState(() => _showSettingsPanel = false);
-  }
-
-  void _showPremiumPaywall() {
-    if (!mounted) return;
-    context.read<PurchaseService>().refreshProducts();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const PremiumPaywallSheet(),
-    );
   }
 
   List<Color> _getCategoryGradient(StirnratenCategory category) {
@@ -2011,11 +1950,15 @@ class _IconCircleButtonState extends State<_IconCircleButton> {
 class CustomWordsScreen extends StatefulWidget {
   final CustomWordStorage storage;
   final void Function(CustomWordList list) onPlay;
+  final WordlistRepository? repository;
+  final AIWordlistService? aiService;
 
   const CustomWordsScreen({
     super.key,
     required this.storage,
     required this.onPlay,
+    this.repository,
+    this.aiService,
   });
 
   @override
@@ -2025,23 +1968,74 @@ class CustomWordsScreen extends StatefulWidget {
 class _CustomWordsScreenState extends State<CustomWordsScreen> {
   List<CustomWordList> _lists = [];
   bool _loading = true;
+  bool _authBusy = false;
+  bool _isCloudAuthenticated = false;
+  String? _cloudError;
+  late final WordlistRepository? _repository;
+  late final AIWordlistService? _aiService;
+  SupabaseAuthService? _authService;
+  StreamSubscription<dynamic>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _repository =
+        widget.repository ?? SupabaseWordlistRepository.fromEnvironment();
+    _aiService = widget.aiService ?? HttpAIWordlistService.fromEnvironment();
+    _authService = SupabaseAuthService.fromInitializedClient();
+    _isCloudAuthenticated = _authService?.hasSession ?? false;
+    if (_authService != null) {
+      _authSubscription = _authService!.onAuthStateChange.listen((_) {
+        final nowSignedIn = _authService!.hasSession;
+        if (!mounted) return;
+        if (_isCloudAuthenticated != nowSignedIn) {
+          setState(() => _isCloudAuthenticated = nowSignedIn);
+          _loadLists();
+        }
+      });
+      unawaited(_initializeCloudSession());
+    }
     _loadLists();
   }
 
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadLists() async {
-    final lists = await widget.storage.getLists();
+    final localLists = await widget.storage.getLists();
+    final mergedById = <String, CustomWordList>{
+      for (final list in localLists) list.id: list,
+    };
+    String? cloudError;
+    if (_repository != null && _isCloudAuthenticated) {
+      try {
+        final remoteLists = await _repository!.fetchListsForUser();
+        for (final list in remoteLists) {
+          mergedById[list.id] = list;
+        }
+      } catch (error) {
+        cloudError = error.toString();
+      }
+    }
+    final lists = mergedById.values.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     if (!mounted) return;
     setState(() {
       _lists = lists;
+      _cloudError = cloudError;
       _loading = false;
     });
   }
 
   Future<void> _openEditor({CustomWordList? list}) async {
+    if (list != null && list.source == WordListSource.ai) {
+      await _renameAIList(list);
+      return;
+    }
+
     final result = await Navigator.push<CustomWordList?>(
       context,
       MaterialPageRoute(
@@ -2054,6 +2048,126 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
     if (result != null) {
       await _loadLists();
     }
+  }
+
+  Future<void> _openAIGenerator() async {
+    if (_repository == null || _aiService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'KI/Supabase nicht konfiguriert. Bitte DART_DEFINES setzen.',
+          ),
+        ),
+      );
+      return;
+    }
+    final signedIn = await _ensureCloudSignIn();
+    if (!signedIn) return;
+    if (!mounted) return;
+
+    final saved = await Navigator.push<CustomWordList?>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AIWordlistGeneratorScreen(
+          aiService: _aiService!,
+          repository: _repository!,
+        ),
+      ),
+    );
+    if (saved != null) {
+      await _loadLists();
+    }
+  }
+
+  Future<void> _initializeCloudSession() async {
+    await _ensureCloudSignIn(silent: true);
+  }
+
+  Future<bool> _ensureCloudSignIn({bool silent = false}) async {
+    if (_isCloudAuthenticated) return true;
+    if (_authService == null) {
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Supabase Auth nicht initialisiert. Prüfe SUPABASE_URL und SUPABASE_ANON_KEY.',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+    if (_authBusy) return false;
+
+    setState(() => _authBusy = true);
+    try {
+      final ok = await _authService!.ensureAnonymousSession();
+      if (!mounted) return false;
+      if (!ok) {
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Automatische Anmeldung konnte nicht abgeschlossen werden.',
+              ),
+            ),
+          );
+        }
+        return false;
+      }
+      _isCloudAuthenticated = true;
+      await _loadLists();
+      return true;
+    } catch (error) {
+      if (mounted && !silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cloud-Anmeldung fehlgeschlagen: $error')),
+        );
+      }
+      if (mounted && silent) {
+        setState(() {
+          _cloudError = error.toString();
+        });
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _authBusy = false);
+      }
+    }
+  }
+
+  Future<void> _renameAIList(CustomWordList list) async {
+    if (_repository == null) return;
+    final signedIn = await _ensureCloudSignIn();
+    if (!signedIn) return;
+    if (!mounted) return;
+    final controller = TextEditingController(text: list.title);
+    final nextTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Liste umbenennen'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Neuer Titel'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    if (nextTitle == null || nextTitle.isEmpty || nextTitle == list.title) {
+      return;
+    }
+    await _repository!.renameList(id: list.id, title: nextTitle);
+    await _loadLists();
   }
 
   Future<void> _confirmDelete(CustomWordList list) async {
@@ -2075,13 +2189,21 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
       ),
     );
     if (shouldDelete == true) {
-      await widget.storage.deleteList(list.id);
+      if (list.source == WordListSource.ai && _repository != null) {
+        final signedIn = await _ensureCloudSignIn();
+        if (!signedIn) return;
+        await _repository!.deleteList(list.id);
+      } else {
+        await widget.storage.deleteList(list.id);
+      }
       await _loadLists();
     }
   }
 
   Future<void> _playList(CustomWordList list) async {
-    await widget.storage.markPlayed(list.id);
+    if (list.source == WordListSource.manual) {
+      await widget.storage.markPlayed(list.id);
+    }
     if (!mounted) return;
     Navigator.pop(context);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2130,13 +2252,48 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                  child: Text(
-                    'Erstelle eigene Wortlisten und spiele sie jederzeit wieder.',
-                    style: GoogleFonts.nunito(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: StirnratenColors.categoryMuted,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Erstelle eigene Wortlisten und spiele sie jederzeit wieder.',
+                        style: GoogleFonts.nunito(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: StirnratenColors.categoryMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_repository != null)
+                        Text(
+                          _authBusy
+                              ? 'Cloud-Sync wird vorbereitet ...'
+                              : (_isCloudAuthenticated
+                                  ? 'Cloud-Sync aktiv. Spieler sind automatisch angemeldet.'
+                                  : 'Cloud-Sync nicht aktiv. Aktiviere in Supabase: Authentication -> Providers -> Anonymous.'),
+                          style: GoogleFonts.nunito(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: StirnratenColors.categoryMuted,
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+                      _SecondaryPillButton(
+                        label: 'Mit KI erstellen',
+                        onTap: _openAIGenerator,
+                      ),
+                      if (_cloudError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Cloud-Hinweis: $_cloudError',
+                          style: GoogleFonts.nunito(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 Expanded(
@@ -2472,7 +2629,8 @@ class _CustomListCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '${list.wordCount} Wörter',
+              '${list.wordCount} Wörter • ${list.language.toUpperCase()} • '
+              '${list.source == WordListSource.ai ? 'KI' : 'Manuell'}',
               style: GoogleFonts.nunito(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -2481,9 +2639,11 @@ class _CustomListCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              list.lastPlayedAt == null
-                  ? 'Noch nie gespielt'
-                  : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
+              list.source == WordListSource.ai
+                  ? 'In Supabase gespeichert'
+                  : list.lastPlayedAt == null
+                      ? 'Noch nie gespielt'
+                      : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
               style: GoogleFonts.nunito(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -2502,7 +2662,9 @@ class _CustomListCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 _IconPillButton(
-                  icon: Icons.edit_rounded,
+                  icon: list.source == WordListSource.ai
+                      ? Icons.drive_file_rename_outline_rounded
+                      : Icons.edit_rounded,
                   onTap: onEdit,
                 ),
                 const SizedBox(width: 8),

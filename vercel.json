@@ -5,8 +5,6 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/legal/datenschutz", "destination": "/legal/datenschutz.html" },
-    { "source": "/legal/impressum", "destination": "/legal/impressum.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -39,11 +39,23 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
       repository: widget.repository,
     );
     _topicController = TextEditingController(text: _vm.topic)
-      ..addListener(() => _vm.topic = _topicController.text);
+      ..addListener(() {
+        final next = _topicController.text;
+        if (_vm.topic == next) return;
+        setState(() => _vm.topic = next);
+      });
     _titleController = TextEditingController(text: _vm.title)
-      ..addListener(() => _vm.title = _titleController.text);
+      ..addListener(() {
+        final next = _titleController.text;
+        if (_vm.title == next) return;
+        setState(() => _vm.title = next);
+      });
     _tagsController = TextEditingController(text: _vm.tagsRaw)
-      ..addListener(() => _vm.tagsRaw = _tagsController.text);
+      ..addListener(() {
+        final next = _tagsController.text;
+        if (_vm.tagsRaw == next) return;
+        setState(() => _vm.tagsRaw = next);
+      });
   }
 
   @override

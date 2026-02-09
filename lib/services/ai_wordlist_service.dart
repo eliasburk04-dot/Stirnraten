@@ -234,12 +234,23 @@ class HttpAIWordlistService implements AIWordlistService {
         payload: payload,
       );
       if (response.statusCode == 401) {
-        // Token can be stale (especially on cold start). Refresh once and retry.
-        await _refreshSupabaseSessionIfPossible();
-        response = await _postJsonWithAuth(
-          uri: config.endpoint,
-          payload: payload,
-        );
+        final detail = _extractErrorDetail(response.body).toLowerCase();
+
+        // When switching Supabase projects (or after restores), a persisted token can be invalid
+        // for the current project and yields "Invalid JWT". In that case, reset and re-sign in.
+        final looksLikeInvalidJwt = detail.contains('invalid jwt') ||
+            detail.contains('invalid_jwt') ||
+            detail.contains('invalidjwttoken');
+
+        if (looksLikeInvalidJwt) {
+          await _hardResetSupabaseSession();
+        } else {
+          // Token can be stale (especially on cold start). Refresh once and retry.
+          await _refreshSupabaseSessionIfPossible();
+        }
+
+        response =
+            await _postJsonWithAuth(uri: config.endpoint, payload: payload);
       }
     } on TimeoutException {
       throw const AIWordlistException(
@@ -361,6 +372,21 @@ class HttpAIWordlistService implements AIWordlistService {
       // ignore
     } catch (_) {
       // ignore
+    }
+  }
+
+  Future<void> _hardResetSupabaseSession() async {
+    try {
+      final sb = Supabase.instance.client;
+      await sb.auth.signOut();
+    } catch (_) {
+      // ignore
+    }
+    try {
+      final sb = Supabase.instance.client;
+      await sb.auth.signInAnonymously();
+    } catch (_) {
+      // ignore - caller will surface missing token if this fails
     }
   }
 

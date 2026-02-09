@@ -27,7 +27,28 @@ class SupabaseAuthService {
     Duration timeout = const Duration(seconds: 20),
   }) async {
     if (hasSession) {
-      return true;
+      // We can have a persisted but invalid token (e.g. after switching Supabase projects).
+      // Validate once; on failure, clear local session and re-sign-in anonymously.
+      try {
+        await _client.auth.getUser();
+        return true;
+      } on AuthException catch (error) {
+        final msg = error.message.toLowerCase();
+        final invalidJwt = msg.contains('invalid jwt') ||
+            msg.contains('invalid_jwt') ||
+            msg.contains('invalidjwttoken');
+        if (invalidJwt || error.statusCode == '401') {
+          try {
+            await _client.auth.signOut(scope: SignOutScope.local);
+          } catch (_) {
+            // ignore
+          }
+        } else {
+          rethrow;
+        }
+      } catch (_) {
+        // Ignore and fall through to sign-in.
+      }
     }
 
     final completer = Completer<bool>();

@@ -344,7 +344,7 @@ Deno.serve(async (req: Request) => {
     isPremium = Boolean(row?.is_premium);
     quotaAllowed = Boolean(row?.allowed);
     used = Number(row?.used ?? 0);
-    limit = Number(row?.limit ?? 3);
+    limit = Number(row?.quota_limit ?? 3);
   } catch (e) {
     return json(500, { error: "quota_check_failed", detail: String(e) });
   }

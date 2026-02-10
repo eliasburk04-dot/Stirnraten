@@ -81,7 +81,7 @@ returns table (
   allowed boolean,
   is_premium boolean,
   used int,
-  limit int,
+  quota_limit int,
   date_key text
 )
 language plpgsql
@@ -108,7 +108,7 @@ begin
     allowed := true;
     is_premium := true;
     used := 0;
-    limit := v_limit;
+    quota_limit := v_limit;
     date_key := p_date_key;
     return next;
     return;
@@ -130,7 +130,7 @@ begin
     allowed := false;
     is_premium := false;
     used := coalesce(v_used, v_limit);
-    limit := v_limit;
+    quota_limit := v_limit;
     date_key := p_date_key;
     return next;
     return;
@@ -139,11 +139,10 @@ begin
   allowed := true;
   is_premium := false;
   used := v_used;
-  limit := v_limit;
+  quota_limit := v_limit;
   date_key := p_date_key;
   return next;
 end;
 $$;
 
 grant execute on function public.consume_ai_generation(text) to authenticated, anon;
-

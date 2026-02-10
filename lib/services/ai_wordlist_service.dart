@@ -291,6 +291,47 @@ class SupabaseAIWordlistService implements AIWordlistService {
       );
     }
 
+    String messageForFunctionError({
+      required int status,
+      required dynamic details,
+    }) {
+      String? code;
+      String? detail;
+      if (details is Map) {
+        code = details['error']?.toString().trim();
+        detail = details['detail']?.toString().trim();
+        if (detail != null && detail.length > 220) {
+          detail = '${detail.substring(0, 220)}...';
+        }
+      }
+
+      // Map known server error codes to actionable German messages.
+      if (status == 500 && code == 'quota_check_failed') {
+        return 'KI-Service Fehler (HTTP 500: quota_check_failed). '
+            'Meist fehlt die DB-Funktion consume_ai_generation auf Supabase (Migration nicht gepusht) '
+            'oder sie wirft einen Fehler. ${detail == null ? '' : 'Detail: $detail'}';
+      }
+      if (status == 500 && code == 'auth_verify_failed') {
+        return 'KI-Service Fehler (HTTP 500: auth_verify_failed). '
+            'Server konnte den Supabase JWT nicht verifizieren. ${detail == null ? '' : 'Detail: $detail'}';
+      }
+      if (status == 500 && code == 'supabase_env_missing') {
+        return 'KI-Service Fehler (HTTP 500: supabase_env_missing). '
+            'In der Edge Function fehlen SUPABASE_URL/SUPABASE_ANON_KEY Secrets.';
+      }
+      if (status == 500 && code == 'groq_api_key_missing') {
+        return 'KI-Service Fehler (HTTP 500: groq_api_key_missing). '
+            'In Supabase Secrets fehlt GROQ_API_KEY.';
+      }
+      if (status == 502 && code == 'upstream_error') {
+        return 'KI-Service Fehler (HTTP 502: upstream_error). '
+            '${detail == null ? 'Groq/Upstream antwortet mit Fehler.' : 'Detail: $detail'}';
+      }
+
+      return 'KI-Service Fehler (HTTP $status${code == null || code.isEmpty ? '' : ': $code'}).'
+          '${detail == null || detail.isEmpty ? '' : ' Detail: $detail'}';
+    }
+
     AiUsageSnapshot? usageFromDetails(dynamic details) {
       if (details is Map) {
         return HttpAIWordlistService._tryParseUsageFromMap(details);
@@ -343,7 +384,7 @@ class SupabaseAIWordlistService implements AIWordlistService {
             );
           }
           throw AIWordlistServerException(
-            'KI-Service Fehler (HTTP ${e2.status}).',
+            messageForFunctionError(status: e2.status, details: e2.details),
             usage: usageFromDetails(e2.details),
           );
         }
@@ -359,7 +400,7 @@ class SupabaseAIWordlistService implements AIWordlistService {
         );
       } else {
         throw AIWordlistServerException(
-          'KI-Service Fehler (HTTP ${e.status}).',
+          messageForFunctionError(status: e.status, details: e.details),
           usage: usageFromDetails(e.details),
         );
       }

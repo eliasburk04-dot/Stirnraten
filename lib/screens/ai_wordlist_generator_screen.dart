@@ -126,9 +126,6 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
       );
       return;
     }
-    if (monetization.isPremium) {
-      await monetization.syncPremiumToSupabase();
-    }
     await _vm.generate();
   }
 

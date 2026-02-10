@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../services/supabase_auth_service.dart';
 import 'ai_usage_snapshot.dart';
 import 'berlin_date.dart';
 import 'daily_quota.dart';
@@ -17,12 +15,9 @@ class MonetizationController extends ChangeNotifier {
       String.fromEnvironment('IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
   static const String _envAndroidProductId =
       String.fromEnvironment('ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
-  static const String _envRcIosKey =
-      String.fromEnvironment('REVENUECAT_API_KEY_IOS');
-  static const String _envRcAndroidKey =
-      String.fromEnvironment('REVENUECAT_API_KEY_ANDROID');
 
   final MonetizationPrefs _prefs;
+  final InAppPurchase _iap = InAppPurchase.instance;
 
   bool _initialized = false;
   bool _iapConfigured = false;
@@ -33,6 +28,9 @@ class MonetizationController extends ChangeNotifier {
 
   bool _purchaseBusy = false;
   String? _iapStatusMessage;
+
+  StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
+  ProductDetails? _premiumProduct;
 
   MonetizationController({
     MonetizationPrefs? prefs,
@@ -56,25 +54,6 @@ class MonetizationController extends ChangeNotifier {
 
     if (kIsWeb) {
       // No in-app purchases on web. Keep null to avoid purchase entry points.
-      return null;
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-        return ios.isEmpty ? null : ios;
-      case TargetPlatform.android:
-        return android.isEmpty ? null : android;
-      default:
-        return null;
-    }
-  }
-
-  String? get _currentRevenueCatApiKey {
-    final ios = _envRcIosKey.trim();
-    final android = _envRcAndroidKey.trim();
-
-    if (kIsWeb) {
-      // The plugin provides a web implementation, but we don't sell Premium on web.
       return null;
     }
 
@@ -157,71 +136,41 @@ class MonetizationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> syncPremiumToSupabase() => _syncPremiumToSupabase();
-
   Future<void> _configureIapIfPossible() async {
-    final apiKey = _currentRevenueCatApiKey;
     final productId = currentLifetimeProductId;
-    if (apiKey == null || productId == null) {
+    if (productId == null) {
       _iapConfigured = false;
       return;
     }
 
     try {
-      final appUserId = await _resolveStableAppUserId();
-      await Purchases.configure(
-        PurchasesConfiguration(apiKey)..appUserID = appUserId,
+      final available = await _iap.isAvailable();
+      if (!available) {
+        _iapConfigured = false;
+        _iapStatusMessage = 'Store nicht verfügbar.';
+        return;
+      }
+
+      _purchaseSub?.cancel();
+      _purchaseSub = _iap.purchaseStream.listen(
+        _handlePurchaseUpdates,
+        onError: (_) {},
       );
 
-      Purchases.addCustomerInfoUpdateListener(_onCustomerInfoUpdated);
-
-      final info = await Purchases.getCustomerInfo();
-      _applyCustomerInfo(info);
-
-      _iapConfigured = true;
-      _iapStatusMessage = null;
-
-      if (_isPremium) {
-        unawaited(_syncPremiumToSupabase());
+      final details = await _iap.queryProductDetails(<String>{productId});
+      if (details.error != null) {
+        _iapConfigured = false;
+        _iapStatusMessage = 'Produktabfrage fehlgeschlagen.';
+        return;
       }
+      _premiumProduct =
+          details.productDetails.isEmpty ? null : details.productDetails.first;
+
+      _iapConfigured = _premiumProduct != null;
+      _iapStatusMessage = _iapConfigured ? null : 'Produkt nicht verfügbar.';
     } catch (e) {
       _iapConfigured = false;
       _iapStatusMessage = 'IAP nicht verfügbar: $e';
-    }
-  }
-
-  Future<String?> _resolveStableAppUserId() async {
-    // If Supabase is configured, use its (anonymous) user id. This lets the backend
-    // reliably map Premium to the same user for server-side guardrails.
-    try {
-      final sb = Supabase.instance.client;
-      final auth = SupabaseAuthService(sb);
-      await auth.ensureAnonymousSession(timeout: const Duration(seconds: 12));
-      final uid = sb.auth.currentUser?.id;
-      if (uid != null && uid.trim().isNotEmpty) {
-        return uid.trim();
-      }
-    } catch (_) {
-      // Ignore: fallback to RevenueCat anonymous user.
-    }
-    return null;
-  }
-
-  void _onCustomerInfoUpdated(CustomerInfo info) {
-    _applyCustomerInfo(info);
-  }
-
-  void _applyCustomerInfo(CustomerInfo info) {
-    final productId = currentLifetimeProductId;
-    final hasEntitlement = info.entitlements.active.containsKey('premium');
-    final hasProduct = productId != null &&
-        info.allPurchasedProductIdentifiers.contains(productId);
-    final nextPremium = hasEntitlement || hasProduct;
-    if (nextPremium != _isPremium) {
-      unawaited(setPremium(nextPremium));
-      if (nextPremium) {
-        unawaited(_syncPremiumToSupabase());
-      }
     }
   }
 
@@ -239,40 +188,24 @@ class MonetizationController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final products = await Purchases.getProducts(
-        <String>[productId],
-        productCategory: ProductCategory.nonSubscription,
-      );
-      if (products.isEmpty) {
+      final product = _premiumProduct;
+      if (product == null) {
         _iapStatusMessage = 'Produkt nicht verfügbar.';
         notifyListeners();
         return false;
       }
 
-      final result = await Purchases.purchase(
-        PurchaseParams.storeProduct(products.first),
+      final ok = await _iap.buyNonConsumable(
+        purchaseParam: PurchaseParam(productDetails: product),
       );
-      _applyCustomerInfo(result.customerInfo);
-      _iapStatusMessage = _isPremium ? null : 'Kauf abgeschlossen, aber Premium nicht aktiv.';
-      notifyListeners();
-      return _isPremium;
-    } on PlatformException catch (e) {
-      final code = PurchasesErrorHelper.getErrorCode(e);
-      if (code == PurchasesErrorCode.purchaseCancelledError) {
-        _iapStatusMessage = null;
+      if (!ok) {
+        _iapStatusMessage = 'Kauf konnte nicht gestartet werden.';
         notifyListeners();
         return false;
       }
-      _iapStatusMessage = 'Kauf fehlgeschlagen: ${e.message ?? e.code}';
-      notifyListeners();
-      return false;
+      // Actual premium activation happens in purchaseStream handler.
+      return true;
     } catch (e) {
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('cancelled') || msg.contains('canceled')) {
-        _iapStatusMessage = null;
-        notifyListeners();
-        return false;
-      }
       _iapStatusMessage = 'Kauf fehlgeschlagen: $e';
       notifyListeners();
       return false;
@@ -294,19 +227,9 @@ class MonetizationController extends ChangeNotifier {
     _iapStatusMessage = null;
     notifyListeners();
     try {
-      final info = await Purchases.restorePurchases();
-      _applyCustomerInfo(info);
-      if (_isPremium) {
-        _iapStatusMessage = null;
-      } else {
-        _iapStatusMessage = 'Keine Käufe gefunden.';
-      }
-      notifyListeners();
-      return _isPremium;
-    } on PlatformException catch (e) {
-      _iapStatusMessage = 'Wiederherstellen fehlgeschlagen: ${e.message ?? e.code}';
-      notifyListeners();
-      return false;
+      await _iap.restorePurchases();
+      // Restores will flow through purchaseStream handler.
+      return true;
     } catch (e) {
       _iapStatusMessage = 'Wiederherstellen fehlgeschlagen: $e';
       notifyListeners();
@@ -317,24 +240,85 @@ class MonetizationController extends ChangeNotifier {
     }
   }
 
-  Future<void> _syncPremiumToSupabase() async {
-    if (!_isPremium) return;
+  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
+    final expectedProductId = currentLifetimeProductId;
+    if (expectedProductId == null) return;
+
+    for (final purchase in purchases) {
+      if (purchase.productID != expectedProductId) continue;
+
+      if (purchase.status == PurchaseStatus.pending) {
+        _iapStatusMessage = 'Zahlung ausstehend …';
+        notifyListeners();
+        continue;
+      }
+
+      if (purchase.status == PurchaseStatus.error) {
+        _iapStatusMessage =
+            'Kauf fehlgeschlagen: ${purchase.error?.message ?? 'Unbekannter Fehler'}';
+        notifyListeners();
+        if (purchase.pendingCompletePurchase) {
+          await _iap.completePurchase(purchase);
+        }
+        continue;
+      }
+
+      if (purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored) {
+        // Immediate local unlock for UX; backend verification happens next.
+        await setPremium(true);
+
+        final verified = await _verifyAndSyncToSupabase(
+          platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+          productId: expectedProductId,
+          verificationData: purchase.verificationData.serverVerificationData,
+        );
+
+        if (!verified) {
+          _iapStatusMessage =
+              'Premium gekauft. Verifizierung läuft oder ist fehlgeschlagen.';
+          notifyListeners();
+        } else {
+          _iapStatusMessage = null;
+          notifyListeners();
+        }
+
+        if (purchase.pendingCompletePurchase) {
+          await _iap.completePurchase(purchase);
+        }
+      }
+    }
+  }
+
+  Future<bool> _verifyAndSyncToSupabase({
+    required String platform,
+    required String productId,
+    required String verificationData,
+  }) async {
     try {
       final sb = Supabase.instance.client;
-      // Requires a Supabase session JWT; ensure we have one.
-      final auth = SupabaseAuthService(sb);
-      await auth.ensureAnonymousSession(timeout: const Duration(seconds: 12));
-      await sb.functions.invoke('sync-premium');
+      final res = await sb.functions.invoke(
+        'verify-premium',
+        body: <String, dynamic>{
+          'platform': platform,
+          'productId': productId,
+          'verificationData': verificationData,
+        },
+      );
+      final data = res.data;
+      if (data is Map && data['premium'] == true) {
+        await setPremium(true);
+        return true;
+      }
+      return false;
     } catch (_) {
-      // Offline / Supabase not configured: ignore. Server-side guards will still treat as Free.
+      return false;
     }
   }
 
   @override
   void dispose() {
-    if (_iapConfigured) {
-      Purchases.removeCustomerInfoUpdateListener(_onCustomerInfoUpdated);
-    }
+    _purchaseSub?.cancel();
     super.dispose();
   }
 }

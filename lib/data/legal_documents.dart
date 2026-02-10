@@ -87,11 +87,13 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
             ],
           ),
           LegalSection(
-            title: '5. In-App-Käufe (Premium) und RevenueCat',
+            title: '5. In-App-Käufe (Premium)',
             paragraphs: <String>[
               'Premium wird über Apple App Store bzw. Google Play verkauft. '
-                  'Zur Verwaltung von Käufen/Restores nutzen wir RevenueCat. '
-                  'Zahlungsdaten werden durch den jeweiligen Store verarbeitet.',
+                  'Zahlungsdaten werden durch den jeweiligen Store verarbeitet. '
+                  'Zur serverseitigen Prüfung des Premium-Status können '
+                  'Transaktionsdaten (z. B. Kaufbeleg/Purchase Token) '
+                  'an unseren Backend-Dienst (Supabase) übertragen werden.',
             ],
           ),
           LegalSection(
@@ -124,7 +126,6 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
             bullets: <String>[
               'Supabase (Backend: Datenbank, Auth, Edge Functions)',
               'Groq (KI-API, serverseitig)',
-              'RevenueCat (Kauf-/Entitlement-Verwaltung)',
               'Apple App Store / Google Play (Kaufabwicklung, Restore)',
             ],
           ),

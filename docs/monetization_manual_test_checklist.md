@@ -13,6 +13,5 @@
 5. Manuell: > 100 speichern -> blockiert (Premium bleibt aktiv).
 
 ## Sync / Backend
-1. Nach Premium Kauf: `sync-premium` setzt `public.profiles.premium=true` (Edge Function).
+1. Nach Premium Kauf: `verify-premium` setzt `public.profiles.premium=true` (Edge Function).
 2. `generate-wordlist`: Quota wird serverseitig ueber `consume_ai_generation` gezaehlt.
-

@@ -28,12 +28,12 @@ supabase db push
 
 Diese Functions werden genutzt:
 - `generate-wordlist` (Quota + Wordlimit serverseitig)
-- `sync-premium` (Premium-Flag serverseitig via RevenueCat)
+- `verify-premium` (Premium-Flag serverseitig via Store-Verification)
 
 Deploy:
 ```bash
 supabase functions deploy generate-wordlist
-supabase functions deploy sync-premium
+supabase functions deploy verify-premium
 ```
 
 ## 3) Supabase Secrets setzen
@@ -43,27 +43,25 @@ supabase functions deploy sync-premium
 supabase secrets set GROQ_API_KEY=...
 ```
 
-### RevenueCat Premium Sync (serverseitig)
-`sync-premium` validiert Premium ueber RevenueCat und schreibt `public.profiles.premium`.
+### Premium Verifikation (serverseitig)
+`verify-premium` verifiziert den Lifetime-Kauf direkt mit Apple/Google und schreibt `public.profiles.premium`.
 
 Required:
 ```bash
-supabase secrets set REVENUECAT_SECRET_API_KEY=...
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Optional (wenn deine Product IDs nicht nur im Client gesetzt sind):
+iOS (Receipt Verification, non-consumable):
 ```bash
-supabase secrets set IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID=...
-supabase secrets set ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID=...
+# optional; fuer Subscriptions notwendig, fuer Non-Consumables meist nicht
+supabase secrets set APPLE_VERIFY_RECEIPT_SHARED_SECRET=...
 ```
 
-Optional (wenn du ein anderes Entitlement als "premium" nutzt):
+Android (Google Play Developer API):
 ```bash
-supabase secrets set REVENUECAT_ENTITLEMENT_ID=premium
+supabase secrets set GOOGLE_PLAY_PACKAGE_NAME=com.dein.bundleid
+supabase secrets set GOOGLE_PLAY_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
 ```
-
-Hinweis:
-- `SUPABASE_SERVICE_ROLE_KEY` ist in Edge Functions Runtime i.d.R. vorhanden.
 
 ## 4) Client ENV (DART_DEFINES)
 
@@ -72,11 +70,9 @@ Supabase + KI:
 - `SUPABASE_ANON_KEY`
 - `AI_WORDLIST_ENDPOINT` (Supabase Function URL zu `generate-wordlist`)
 
-IAP/RevenueCat:
+IAP (Store direkt):
 - `IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID`
 - `ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID`
-- `REVENUECAT_API_KEY_IOS`
-- `REVENUECAT_API_KEY_ANDROID`
 
 Beispiel:
 ```bash
@@ -85,8 +81,5 @@ flutter run \\
   --dart-define=SUPABASE_ANON_KEY=... \\
   --dart-define=AI_WORDLIST_ENDPOINT=https://YOUR_PROJECT.supabase.co/functions/v1/generate-wordlist \\
   --dart-define=IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID=... \\
-  --dart-define=ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID=... \\
-  --dart-define=REVENUECAT_API_KEY_IOS=... \\
-  --dart-define=REVENUECAT_API_KEY_ANDROID=...
+  --dart-define=ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID=...
 ```
-

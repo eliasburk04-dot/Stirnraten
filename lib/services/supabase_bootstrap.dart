@@ -41,6 +41,32 @@ class SupabaseBootstrap {
       rethrow;
     }
 
+    // If the app was previously pointed at another Supabase project, we can have
+    // a persisted (but now invalid) JWT. Clear it early so later Edge Function
+    // calls don't fail with "Invalid JWT".
+    try {
+      final sb = Supabase.instance.client;
+      final session = sb.auth.currentSession;
+      final token = session?.accessToken;
+      if (session != null && token != null && token.trim().isNotEmpty) {
+        await sb.auth.getUser();
+      }
+    } on AuthException catch (error) {
+      final msg = error.message.toLowerCase();
+      final invalidJwt = msg.contains('invalid jwt') ||
+          msg.contains('invalid_jwt') ||
+          msg.contains('invalidjwttoken');
+      if (invalidJwt || error.statusCode == '401') {
+        try {
+          await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {
+          // ignore
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+
     if (kDebugMode) {
       debugPrint('Supabase initialisiert.');
     }

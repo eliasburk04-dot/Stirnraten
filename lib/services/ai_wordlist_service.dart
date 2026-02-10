@@ -231,7 +231,14 @@ class SupabaseAIWordlistService implements AIWordlistService {
   }) async {
     request.validate();
 
-    await _auth.ensureAnonymousSession();
+    final signedIn = await _auth.ensureAnonymousSession(
+      timeout: const Duration(seconds: 25),
+    );
+    if (!signedIn) {
+      throw const AIWordlistException(
+        'Supabase Login Timeout. Bitte erneut versuchen.',
+      );
+    }
 
     final payload = <String, dynamic>{
       'input': <String, dynamic>{...request.toJson()},
@@ -275,7 +282,14 @@ class SupabaseAIWordlistService implements AIWordlistService {
         } catch (_) {
           // ignore
         }
-        await _auth.ensureAnonymousSession();
+        final ok = await _auth.ensureAnonymousSession(
+          timeout: const Duration(seconds: 25),
+        );
+        if (!ok) {
+          throw const AIWordlistException(
+            'Supabase Login Timeout. Bitte erneut versuchen.',
+          );
+        }
         try {
           res = await invokeOnce();
         } on FunctionException catch (e2) {

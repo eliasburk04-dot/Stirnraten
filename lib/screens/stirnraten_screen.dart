@@ -1985,9 +1985,10 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
     super.initState();
     _repository =
         widget.repository ?? SupabaseWordlistRepository.fromEnvironment();
-    _aiService = widget.aiService ??
-        SupabaseAIWordlistService.fromInitializedClient() ??
-        HttpAIWordlistService.fromEnvironment();
+    // Always prefer calling the Supabase Edge Function via functions.invoke.
+    // The raw HTTP endpoint variant is more error-prone (stale/invalid JWT).
+    _aiService =
+        widget.aiService ?? SupabaseAIWordlistService.fromInitializedClient();
     _authService = SupabaseAuthService.fromInitializedClient();
     _isCloudAuthenticated = _authService?.hasSession ?? false;
     if (_authService != null) {

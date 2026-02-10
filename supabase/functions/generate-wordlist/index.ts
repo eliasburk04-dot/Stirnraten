@@ -284,7 +284,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  // Use the client-provided publishable key when present. After API key migration,
+  // Edge Function env vars can lag behind and still contain legacy keys.
+  // See: https://github.com/supabase/supabase/issues/37648
+  const clientApiKey = (req.headers.get("apikey") ?? req.headers.get("x-supabase-anon-key") ?? "").trim();
+  const supabaseAnon = clientApiKey || (Deno.env.get("SUPABASE_ANON_KEY") ?? "");
   if (!supabaseUrl || !supabaseAnon) {
     // Should be present by default in Edge Functions runtime, but keep a clear error.
     return json(500, { error: "supabase_env_missing" });

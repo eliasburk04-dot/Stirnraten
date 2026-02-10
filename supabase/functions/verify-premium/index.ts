@@ -221,7 +221,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  // Prefer client-provided publishable key to avoid legacy key mismatches after API key migration.
+  // See: https://github.com/supabase/supabase/issues/37648
+  const clientApiKey = (req.headers.get("apikey") ?? req.headers.get("x-supabase-anon-key") ?? "").trim();
+  const supabaseAnon = clientApiKey || (Deno.env.get("SUPABASE_ANON_KEY") ?? "");
   // Supabase CLI blocks custom env names starting with SUPABASE_.
   // Use SERVICE_ROLE_KEY as the deploy-time secret name.
   const supabaseServiceRole =

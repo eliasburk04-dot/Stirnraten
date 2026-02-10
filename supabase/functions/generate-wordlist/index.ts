@@ -65,13 +65,23 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 function berlinDateKey(now: Date = new Date()): string {
-  // en-CA gives YYYY-MM-DD reliably.
-  return new Intl.DateTimeFormat("en-CA", {
+  // Build YYYY-MM-DD from parts to avoid locale formatting differences.
+  const parts = new Intl.DateTimeFormat("en", {
     timeZone: "Europe/Berlin",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(now);
+  }).formatToParts(now);
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    if (p.type === "year" || p.type === "month" || p.type === "day") {
+      map[p.type] = p.value;
+    }
+  }
+  const y = map.year ?? "";
+  const m = map.month ?? "";
+  const d = map.day ?? "";
+  return `${y}-${m}-${d}`.trim();
 }
 
 function normalizeItems(items: unknown, requestedCount: number): string[] {

@@ -232,6 +232,54 @@ function buildUserPrompt(input: ClientRequest["input"]): string {
   ].join("\n");
 }
 
+function buildUserPromptWithExcludes(args: {
+  input: ClientRequest["input"];
+  excludeTerms?: string[];
+}): string {
+  const base = buildUserPrompt(args.input);
+  const excludes = (args.excludeTerms ?? [])
+    .map((t) => (t ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 60);
+  if (!excludes.length) return base;
+  return `${base}\nexclude_terms: ${excludes.join(", ")}`.trim();
+}
+
+function computeAskCount(args: {
+  targetCount: number;
+  currentValidCount: number;
+  attempt: number;
+  maxItems: number;
+}): number {
+  const remaining = clamp(args.targetCount - args.currentValidCount, 0, args.targetCount);
+  if (args.attempt === 0) {
+    const buffer = clamp(Math.floor(args.targetCount / 2), 10, 35);
+    return clamp(args.targetCount + buffer, 5, args.maxItems);
+  }
+  const followUp = remaining + 12;
+  return clamp(followUp, 5, args.maxItems);
+}
+
+async function callGroqWithRateLimitRetry(args: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  temperature: number;
+}): Promise<unknown> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await callGroqChatCompletion(args);
+    if ((raw as any)?.__rate_limited) {
+      if (attempt === 0) {
+        await sleep(900);
+        continue;
+      }
+    }
+    return raw;
+  }
+  return { __error: true, status: 429, body: "rate_limited" };
+}
+
 async function callGroqChatCompletion(args: {
   apiKey: string;
   model: string;
@@ -383,17 +431,34 @@ Deno.serve(async (req: Request) => {
   const temperature = Number(Deno.env.get("GROQ_TEMPERATURE") ?? "0.4");
 
   const system = buildSystemPrompt(body);
-  const user = buildUserPrompt({
-    ...input,
-    topic,
-    language,
-    difficulty,
-    count: requestedCount,
-  } as any);
 
-  // Retry once on 429 to smooth occasional spikes.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await callGroqChatCompletion({
+  // Ensure we return exactly the requested count (within maxItems) whenever possible.
+  // We may call Groq multiple times within the *same* quota-consumed invocation to fill gaps.
+  const targetCount = requestedCount;
+  const rawPool: string[] = [];
+  let normalized: string[] = [];
+  let title: string | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const askCount = computeAskCount({
+      targetCount,
+      currentValidCount: normalized.length,
+      attempt,
+      maxItems,
+    });
+
+    const user = buildUserPromptWithExcludes({
+      input: {
+        ...input,
+        topic,
+        language,
+        difficulty,
+        count: askCount,
+      } as any,
+      excludeTerms: normalized,
+    });
+
+    const raw = await callGroqWithRateLimitRetry({
       apiKey: groqApiKey,
       model,
       system,
@@ -402,10 +467,6 @@ Deno.serve(async (req: Request) => {
     });
 
     if ((raw as any)?.__rate_limited) {
-      if (attempt === 0) {
-        await sleep(900);
-        continue;
-      }
       return json(429, {
         error: "rate_limited",
         usage: { date_key: dateKey, used, limit, premium: isPremium },
@@ -431,26 +492,41 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const title = String(payload.title ?? "").trim() || `${topic} (${difficulty})`;
-    const items = normalizeItems(payload.items, requestedCount);
-    if (items.length < 5) {
-      return json(502, {
-        error: "too_few_items",
-        count: items.length,
-        usage: { date_key: dateKey, used, limit, premium: isPremium },
-      });
+    if (!title) {
+      title = String(payload.title ?? "").trim() || `${topic} (${difficulty})`;
     }
-    return json(200, {
-      title,
-      language,
-      items,
+
+    rawPool.push(...(Array.isArray(payload.items) ? payload.items.map(String) : []));
+    normalized = normalizeItems(rawPool, targetCount);
+
+    if (normalized.length >= targetCount) {
+      break;
+    }
+  }
+
+  const finalTitle = title ?? `${topic} (${difficulty})`;
+  if (normalized.length < 5) {
+    return json(502, {
+      error: "too_few_items",
+      count: normalized.length,
       usage: { date_key: dateKey, used, limit, premium: isPremium },
-      max_items: maxItems,
     });
   }
 
-  return json(500, {
-    error: "unexpected",
+  if (normalized.length < targetCount) {
+    return json(502, {
+      error: "too_few_items",
+      count: normalized.length,
+      target: targetCount,
+      usage: { date_key: dateKey, used, limit, premium: isPremium },
+    });
+  }
+
+  return json(200, {
+    title: finalTitle,
+    language,
+    items: normalized.slice(0, targetCount),
     usage: { date_key: dateKey, used, limit, premium: isPremium },
+    max_items: maxItems,
   });
 });

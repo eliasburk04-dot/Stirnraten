@@ -47,6 +47,10 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
       aiService: widget.aiService,
       repository: widget.repository,
     );
+    // Free users should not configure more than 20 AI items; premium up to 100.
+    final monetization = context.read<MonetizationController>();
+    final maxSelectable = monetization.isPremium ? 100 : 20;
+    _vm.count = _vm.count.clamp(5, maxSelectable);
     _topicController = TextEditingController(text: _vm.topic)
       ..addListener(() {
         final next = _topicController.text;
@@ -150,6 +154,14 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     return AnimatedBuilder(
       animation: _vm,
       builder: (context, _) {
+        final monetization = context.watch<MonetizationController>();
+        final maxAiSelectable = monetization.isPremium ? 100 : 20;
+        if (_vm.count > maxAiSelectable) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() => _vm.count = maxAiSelectable);
+          });
+        }
         final maxAllowed = context.watch<MonetizationController>().maxWordsPerList;
         _applyUsageIfPresent(_vm.lastUsage);
         if (_vm.lastErrorWasQuotaExceeded) {
@@ -321,12 +333,39 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                                   ),
                                 ),
                                 _CountButton(
-                                  icon: Icons.add_rounded,
-                                  onTap: _vm.count < 100
-                                      ? () => setState(() => _vm.count++)
-                                      : null,
+                                  icon: !monetization.isPremium && _vm.count >= 20
+                                      ? Icons.lock_rounded
+                                      : Icons.add_rounded,
+                                  onTap: monetization.isPremium
+                                      ? (_vm.count < 100
+                                          ? () => setState(() => _vm.count++)
+                                          : null)
+                                      : (_vm.count < 20
+                                          ? () => setState(() => _vm.count++)
+                                          : () async {
+                                              await showPremiumPaywall(
+                                                context,
+                                                trigger: PaywallTrigger.wordLimit,
+                                                message:
+                                                    'Free: maximal 20 Begriffe pro KI-Liste. Premium: bis zu 100.',
+                                              );
+                                            }),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 6),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                monetization.isPremium
+                                    ? 'Premium: bis zu 100 Begriffe'
+                                    : 'Free: bis zu 20 Begriffe',
+                                style: GoogleFonts.nunito(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: StirnratenColors.categoryMuted,
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 12),
                             if (_vm.state == AIWordlistUiState.loading)

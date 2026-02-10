@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../monetization/ai_usage_snapshot.dart';
+import 'supabase_auth_service.dart';
 import 'wordlist_normalizer.dart';
 
 enum AIWordlistDifficulty { easy, medium, hard }
@@ -197,6 +198,176 @@ abstract class AIWordlistService {
   Stream<AIWordlistProgress> generateWordlistStream({
     required AIWordlistRequest request,
   });
+}
+
+/// Preferred implementation: calls the Supabase Edge Function using the initialized
+/// Supabase client (`functions.invoke`). This avoids misconfigured endpoints and
+/// guarantees the JWT matches the current Supabase project.
+class SupabaseAIWordlistService implements AIWordlistService {
+  final SupabaseClient _client;
+  final SupabaseAuthService _auth;
+
+  SupabaseAIWordlistService(this._client) : _auth = SupabaseAuthService(_client);
+
+  static SupabaseAIWordlistService? fromInitializedClient() {
+    try {
+      return SupabaseAIWordlistService(Supabase.instance.client);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<String>> generateWordlist({
+    required AIWordlistRequest request,
+  }) async {
+    final result = await generateWordlistResult(request: request);
+    return result.items;
+  }
+
+  @override
+  Future<AIWordlistResult> generateWordlistResult({
+    required AIWordlistRequest request,
+  }) async {
+    request.validate();
+
+    await _auth.ensureAnonymousSession();
+
+    final payload = <String, dynamic>{
+      'input': <String, dynamic>{...request.toJson()},
+      'instructions': HttpAIWordlistService._buildStrictPrompt(request),
+      'responseSchema': <String, dynamic>{
+        'type': 'object',
+        'required': <String>['title', 'language', 'items'],
+        'properties': <String, dynamic>{
+          'title': <String, dynamic>{'type': 'string'},
+          'language': <String, dynamic>{'type': 'string'},
+          'items': <String, dynamic>{
+            'type': 'array',
+            'items': <String, dynamic>{'type': 'string'},
+          },
+        },
+      },
+    };
+
+    Future<FunctionResponse> invokeOnce() {
+      return _client.functions.invoke(
+        'generate-wordlist',
+        body: payload,
+      );
+    }
+
+    AiUsageSnapshot? usageFromDetails(dynamic details) {
+      if (details is Map) {
+        return HttpAIWordlistService._tryParseUsageFromMap(details);
+      }
+      return null;
+    }
+
+    FunctionResponse res;
+    try {
+      res = await invokeOnce();
+    } on FunctionException catch (e) {
+      if (e.status == 401) {
+        // Likely persisted token from another project; clear local session and retry once.
+        try {
+          await _client.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {
+          // ignore
+        }
+        await _auth.ensureAnonymousSession();
+        try {
+          res = await invokeOnce();
+        } on FunctionException catch (e2) {
+          if (e2.status == 401) {
+            final detail = e2.details is Map
+                ? ((e2.details as Map)['error'] ?? (e2.details as Map)['message'])
+                    ?.toString()
+                : null;
+            throw AIWordlistException(
+              'KI-Service nicht autorisiert (HTTP 401${detail == null ? '' : ': $detail'}). '
+              'Prüfe: Supabase Anonymous Auth ist aktiv und SUPABASE_URL/SUPABASE_ANON_KEY sind korrekt.',
+            );
+          }
+          if (e2.status == 402) {
+            throw AIQuotaExceededException(
+              'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+              usage: usageFromDetails(e2.details),
+            );
+          }
+          if (e2.status == 429) {
+            throw const AIRateLimitException(
+              'Zu viele KI-Anfragen. Bitte kurz warten.',
+              Duration(seconds: 20),
+            );
+          }
+          throw AIWordlistServerException(
+            'KI-Service Fehler (HTTP ${e2.status}).',
+            usage: usageFromDetails(e2.details),
+          );
+        }
+      } else if (e.status == 402) {
+        throw AIQuotaExceededException(
+          'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+          usage: usageFromDetails(e.details),
+        );
+      } else if (e.status == 429) {
+        throw const AIRateLimitException(
+          'Zu viele KI-Anfragen. Bitte kurz warten.',
+          Duration(seconds: 20),
+        );
+      } else {
+        throw AIWordlistServerException(
+          'KI-Service Fehler (HTTP ${e.status}).',
+          usage: usageFromDetails(e.details),
+        );
+      }
+    }
+
+    final data = res.data;
+    if (data is! Map) throw const AIWordlistException('Ungültige KI-Antwort.');
+
+    final usage = HttpAIWordlistService._tryParseUsageFromMap(data);
+    final raw = AIWordlistResponse.fromJson(data.cast<String, dynamic>());
+
+    final normalized = WordlistNormalizer.normalize(
+      items: raw.items,
+      requestedCount: request.count,
+      minValid: 0,
+    );
+
+    return AIWordlistResult(
+      title: request.title?.trim().isNotEmpty == true ? request.title!.trim() : raw.title,
+      language: raw.language,
+      items: normalized,
+      usage: usage,
+    );
+  }
+
+  @override
+  Stream<AIWordlistProgress> generateWordlistStream({
+    required AIWordlistRequest request,
+  }) async* {
+    yield const AIWordlistProgress(
+      stage: AIWordlistProgressStage.requesting,
+      progress: 0.2,
+      message: 'KI wird angefragt ...',
+    );
+
+    yield const AIWordlistProgress(
+      stage: AIWordlistProgressStage.parsing,
+      progress: 0.55,
+      message: 'Antwort wird verarbeitet ...',
+    );
+
+    final result = await generateWordlistResult(request: request);
+    yield AIWordlistProgress(
+      stage: AIWordlistProgressStage.done,
+      progress: 1.0,
+      message: 'Fertig.',
+      result: result,
+    );
+  }
 }
 
 class HttpAIWordlistService implements AIWordlistService {
@@ -511,30 +682,31 @@ class HttpAIWordlistService implements AIWordlistService {
     try {
       final decoded = jsonDecode(trimmed);
       if (decoded is Map) {
-        final usage = decoded['usage'];
-        if (usage is Map) {
-          final dateKey = (usage['date_key'] ?? usage['dateKey'])?.toString();
-          final usedRaw = usage['used'] ?? usage['count'];
-          final limitRaw = usage['limit'];
-          final used = usedRaw is num ? usedRaw.toInt() : int.tryParse('$usedRaw');
-          final limit =
-              limitRaw is num ? limitRaw.toInt() : int.tryParse('$limitRaw');
-          if (dateKey != null &&
-              dateKey.trim().isNotEmpty &&
-              used != null &&
-              limit != null) {
-            return AiUsageSnapshot(
-              dateKey: dateKey.trim(),
-              used: used,
-              limit: limit,
-            );
-          }
-        }
+        return _tryParseUsageFromMap(decoded);
       }
     } catch (_) {
       // ignore
     }
     return null;
+  }
+
+  static AiUsageSnapshot? _tryParseUsageFromMap(Map decoded) {
+    final usage = decoded['usage'];
+    if (usage is! Map) return null;
+
+    final dateKey = (usage['date_key'] ?? usage['dateKey'])?.toString();
+    final usedRaw = usage['used'] ?? usage['count'];
+    final limitRaw = usage['limit'];
+    final used = usedRaw is num ? usedRaw.toInt() : int.tryParse('$usedRaw');
+    final limit = limitRaw is num ? limitRaw.toInt() : int.tryParse('$limitRaw');
+    if (dateKey == null || dateKey.trim().isEmpty) return null;
+    if (used == null || limit == null) return null;
+
+    return AiUsageSnapshot(
+      dateKey: dateKey.trim(),
+      used: used,
+      limit: limit,
+    );
   }
 
   @override

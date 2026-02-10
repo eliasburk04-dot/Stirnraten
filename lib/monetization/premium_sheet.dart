@@ -72,13 +72,13 @@ class _PremiumSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _FeatureRow(
+            const _FeatureRow(
               icon: Icons.auto_awesome_rounded,
               title: 'Unbegrenzte KI-Listen',
               subtitle: 'Free: ${MonetizationLimits.freeDailyAiGenerations} pro Tag',
             ),
             const SizedBox(height: 10),
-            _FeatureRow(
+            const _FeatureRow(
               icon: Icons.list_alt_rounded,
               title: 'Bis zu 100 Wörter pro Liste',
               subtitle: 'Free: ${MonetizationLimits.freeMaxWordsPerList}',
@@ -126,7 +126,9 @@ class _PremiumSheet extends StatelessWidget {
                     title: monetization.isPremium ? 'Premium aktiv' : 'Premium kaufen',
                     icon: Icons.workspace_premium_rounded,
                     primary: true,
-                    onTap: monetization.isPremium || monetization.isPurchaseBusy
+                    onTap: monetization.isPremium ||
+                            monetization.isPurchaseBusy ||
+                            !monetization.iapConfigured
                         ? null
                         : () async {
                             final ok = await monetization.buyPremium();
@@ -259,4 +261,3 @@ class _SheetButton extends StatelessWidget {
     );
   }
 }
-

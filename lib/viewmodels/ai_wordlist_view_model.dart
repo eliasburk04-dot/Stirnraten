@@ -5,6 +5,7 @@ import '../services/ai_wordlist_service.dart';
 import '../services/custom_word_storage.dart';
 import '../services/supabase_wordlist_repository.dart';
 import '../services/wordlist_normalizer.dart';
+import '../utils/word_token_count.dart';
 
 enum AIWordlistUiState {
   idle,
@@ -139,6 +140,32 @@ class AIWordlistViewModel extends ChangeNotifier {
     if (maxItems <= 0) return;
     if (previewItems.length <= maxItems) return;
     previewItems = previewItems.take(maxItems).toList(growable: false);
+    notifyListeners();
+  }
+
+  void enforceMaxWordTokens(int maxTokens) {
+    if (maxTokens <= 0) return;
+    final current = WordTokenCount.count(previewItems);
+    if (current <= maxTokens) return;
+
+    var total = 0;
+    final out = <String>[];
+    for (final item in previewItems) {
+      final nextTokens = WordTokenCount.count(<String>[item]);
+      if (nextTokens == 0) continue;
+      if (total + nextTokens > maxTokens) break;
+      out.add(item);
+      total += nextTokens;
+    }
+
+    // Always keep at least 5 items if possible to avoid a "can't save" dead-end.
+    if (out.length < 5 && previewItems.length >= 5) {
+      out
+        ..clear()
+        ..addAll(previewItems.take(5));
+    }
+
+    previewItems = out.toList(growable: false);
     notifyListeners();
   }
 

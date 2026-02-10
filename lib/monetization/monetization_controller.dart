@@ -140,6 +140,12 @@ class MonetizationController extends ChangeNotifier {
     final productId = currentLifetimeProductId;
     if (productId == null) {
       _iapConfigured = false;
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.android)) {
+        _iapStatusMessage =
+            'IAP Produkt-ID fehlt. Setze IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID / ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID.';
+      }
       return;
     }
 

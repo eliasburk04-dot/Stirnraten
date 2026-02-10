@@ -28,6 +28,7 @@ import '../theme/stirnraten_colors.dart';
 import '../monetization/monetization_controller.dart';
 import '../monetization/premium_paywall.dart';
 import '../utils/wordlist_terms.dart';
+import '../utils/word_token_count.dart';
 import 'ai_wordlist_generator_screen.dart';
 
 const double _tiltNeutralZoneDeg = 10;
@@ -1984,7 +1985,9 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
     super.initState();
     _repository =
         widget.repository ?? SupabaseWordlistRepository.fromEnvironment();
-    _aiService = widget.aiService ?? HttpAIWordlistService.fromEnvironment();
+    _aiService = widget.aiService ??
+        SupabaseAIWordlistService.fromInitializedClient() ??
+        HttpAIWordlistService.fromEnvironment();
     _authService = SupabaseAuthService.fromInitializedClient();
     _isCloudAuthenticated = _authService?.hasSession ?? false;
     if (_authService != null) {
@@ -2347,7 +2350,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
   void _recountWords() {
     final words = _parseWords(_wordsController.text);
     setState(() {
-      _wordCount = words.length;
+      _wordCount = WordTokenCount.count(words);
       if (_error != null && _wordCount >= _minWords) {
         _error = null;
       }
@@ -2362,15 +2365,16 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
     final title = _titleController.text.trim();
     final words = _parseWords(_wordsController.text);
     final maxAllowed = context.read<MonetizationController>().maxWordsPerList;
+    final tokenCount = WordTokenCount.count(words);
     if (title.isEmpty) {
       setState(() => _error = 'Bitte einen Titel angeben.');
       return;
     }
-    if (words.length < _minWords) {
+    if (tokenCount < _minWords) {
       setState(() => _error = 'Mindestens $_minWords Wörter erforderlich.');
       return;
     }
-    if (words.length > maxAllowed) {
+    if (tokenCount > maxAllowed) {
       await showPremiumPaywall(
         context,
         trigger: PaywallTrigger.wordLimit,

@@ -143,11 +143,11 @@ class _PaywallContent extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        _Bullet('Unbegrenzte KI-Listen'),
+        const _Bullet('Unbegrenzte KI-Listen'),
         const SizedBox(height: 6),
-        _Bullet('Bis zu 100 Wörter pro Liste'),
+        const _Bullet('Bis zu 100 Wörter pro Liste'),
         const SizedBox(height: 6),
-        _Bullet('Keine Limits mehr'),
+        const _Bullet('Keine Limits mehr'),
         const SizedBox(height: 14),
         if (monetization.iapStatusMessage != null) ...[
           Container(
@@ -191,7 +191,9 @@ class _PaywallContent extends StatelessWidget {
               child: _PrimaryPillButton(
                 label: isPremium ? 'Premium aktiv' : 'Premium kaufen',
                 icon: Icons.lock_open_rounded,
-                onTap: monetization.isPurchaseBusy || isPremium
+                onTap: monetization.isPurchaseBusy ||
+                        isPremium ||
+                        !monetization.iapConfigured
                     ? null
                     : () async {
                         final ok = await monetization.buyPremium();

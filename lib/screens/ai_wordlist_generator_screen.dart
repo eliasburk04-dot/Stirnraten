@@ -11,6 +11,7 @@ import '../services/ai_wordlist_service.dart';
 import '../services/supabase_wordlist_repository.dart';
 import '../theme/stirnraten_colors.dart';
 import '../utils/effects_quality.dart';
+import '../utils/word_token_count.dart';
 import '../widgets/glass_widgets.dart';
 import '../viewmodels/ai_wordlist_view_model.dart';
 
@@ -95,7 +96,8 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   Future<void> _save() async {
     final monetization = context.read<MonetizationController>();
     final maxAllowed = monetization.maxWordsPerList;
-    if (_vm.previewItems.length > maxAllowed) {
+    final tokenCount = WordTokenCount.count(_vm.previewItems);
+    if (tokenCount > maxAllowed) {
       await showPremiumPaywall(
         context,
         trigger: PaywallTrigger.wordLimit,
@@ -161,8 +163,9 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
             });
           }
         }
-        if (_vm.previewItems.length > maxAllowed) {
-          final token = '${_vm.previewItems.length}:$maxAllowed';
+        final tokenCount = WordTokenCount.count(_vm.previewItems);
+        if (tokenCount > maxAllowed) {
+          final token = '$tokenCount:$maxAllowed';
           if (_lastTrimNoticeToken != token) {
             _lastTrimNoticeToken = token;
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -172,7 +175,7 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                   content: Text('Auf $maxAllowed Wörter gekürzt.'),
                 ),
               );
-              _vm.enforceMaxItems(maxAllowed);
+              _vm.enforceMaxWordTokens(maxAllowed);
             });
           }
         }

@@ -240,6 +240,33 @@ class SupabaseAIWordlistService implements AIWordlistService {
       );
     }
 
+    // Defensive: make sure we really have a user JWT. If not, functions.invoke
+    // will fall back to using the anon key as Bearer token which yields
+    // "Invalid JWT" on the server.
+    try {
+      final token = (_client.auth.currentSession?.accessToken ?? '').trim();
+      final looksLikeJwt = token.startsWith('eyJ') && token.split('.').length >= 3;
+      if (!looksLikeJwt) {
+        await _client.auth.signOut(scope: SignOutScope.local);
+        final ok = await _auth.ensureAnonymousSession(
+          timeout: const Duration(seconds: 25),
+        );
+        if (!ok) {
+          throw const AIWordlistException(
+            'Supabase Login Timeout. Bitte erneut versuchen.',
+          );
+        }
+      }
+
+      // Validate session once so we fail with a clear auth error before calling the function.
+      await _client.auth.getUser();
+    } catch (e) {
+      // Keep message user-friendly; details aren't actionable in production.
+      throw const AIWordlistException(
+        'Supabase Login fehlgeschlagen. Bitte App neu starten und erneut versuchen.',
+      );
+    }
+
     final payload = <String, dynamic>{
       'input': <String, dynamic>{...request.toJson()},
       'instructions': HttpAIWordlistService._buildStrictPrompt(request),

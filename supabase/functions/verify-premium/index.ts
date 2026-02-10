@@ -11,7 +11,7 @@
 // }
 //
 // Secrets:
-// - SUPABASE_SERVICE_ROLE_KEY (required to upsert profiles without opening RLS)
+// - SERVICE_ROLE_KEY (required to upsert profiles without opening RLS)
 //
 // iOS:
 // - APPLE_VERIFY_RECEIPT_SHARED_SECRET (optional; required for subscriptions, ok empty for non-consumables)
@@ -222,7 +222,10 @@ Deno.serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  const supabaseServiceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  // Supabase CLI blocks custom env names starting with SUPABASE_.
+  // Use SERVICE_ROLE_KEY as the deploy-time secret name.
+  const supabaseServiceRole =
+    (Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
   if (!supabaseUrl || !supabaseAnon) return json(500, { error: "supabase_env_missing" });
   if (!supabaseServiceRole) return json(500, { error: "service_role_missing" });
 
@@ -295,4 +298,3 @@ Deno.serve(async (req: Request) => {
 
   return json(200, { premium });
 });
-

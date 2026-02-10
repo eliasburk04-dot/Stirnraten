@@ -15,6 +15,8 @@ class MonetizationController extends ChangeNotifier {
       String.fromEnvironment('IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
   static const String _envAndroidProductId =
       String.fromEnvironment('ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
+  static const String _fallbackIosProductId =
+      'com.stirnraten.app.premium_lifetime';
 
   final MonetizationPrefs _prefs;
   final InAppPurchase _iap = InAppPurchase.instance;
@@ -59,7 +61,8 @@ class MonetizationController extends ChangeNotifier {
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.iOS:
-        return ios.isEmpty ? null : ios;
+        // iOS is our current priority; keep a safe fallback to avoid "dead" premium UI.
+        return ios.isEmpty ? _fallbackIosProductId : ios;
       case TargetPlatform.android:
         return android.isEmpty ? null : android;
       default:
@@ -143,8 +146,9 @@ class MonetizationController extends ChangeNotifier {
       if (!kIsWeb &&
           (defaultTargetPlatform == TargetPlatform.iOS ||
               defaultTargetPlatform == TargetPlatform.android)) {
-        _iapStatusMessage =
-            'IAP Produkt-ID fehlt. Setze IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID / ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID.';
+        _iapStatusMessage = defaultTargetPlatform == TargetPlatform.iOS
+            ? 'IAP Produkt-ID fehlt. Setze IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID.'
+            : 'IAP Produkt-ID fehlt.';
       }
       return;
     }

@@ -2061,7 +2061,9 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'KI/Supabase nicht konfiguriert. Bitte DART_DEFINES setzen.',
+            'KI/Supabase nicht konfiguriert. '
+            'Für iOS/Xcode: scripts/generate_ios_xcode_dart_defines.sh ausführen '
+            'oder flutter run --dart-define-from-file=ios/Flutter/dart_defines_prod.env',
           ),
         ),
       );
@@ -2375,6 +2377,11 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
       return;
     }
     if (tokenCount > maxAllowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).'),
+        ),
+      );
       await showPremiumPaywall(
         context,
         trigger: PaywallTrigger.wordLimit,

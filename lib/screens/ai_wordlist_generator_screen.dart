@@ -98,6 +98,12 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     final maxAllowed = monetization.maxWordsPerList;
     final tokenCount = WordTokenCount.count(_vm.previewItems);
     if (tokenCount > maxAllowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).'),
+        ),
+      );
       await showPremiumPaywall(
         context,
         trigger: PaywallTrigger.wordLimit,

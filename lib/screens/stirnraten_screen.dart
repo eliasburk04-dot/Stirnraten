@@ -25,6 +25,9 @@ import '../widgets/category_card.dart';
 import '../widgets/results_list.dart';
 import '../widgets/settings_panel.dart';
 import '../theme/stirnraten_colors.dart';
+import '../monetization/monetization_controller.dart';
+import '../monetization/premium_paywall.dart';
+import '../utils/wordlist_terms.dart';
 import 'ai_wordlist_generator_screen.dart';
 
 const double _tiltNeutralZoneDeg = 10;
@@ -2317,7 +2320,6 @@ class CustomWordEditorScreen extends StatefulWidget {
 
 class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
   static const int _minWords = 10;
-  static const int _maxWords = 500;
 
   late final TextEditingController _titleController;
   late final TextEditingController _wordsController;
@@ -2343,7 +2345,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
   }
 
   void _recountWords() {
-    final words = _parseWords(_wordsController.text, cap: _maxWords);
+    final words = _parseWords(_wordsController.text);
     setState(() {
       _wordCount = words.length;
       if (_error != null && _wordCount >= _minWords) {
@@ -2352,31 +2354,30 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
     });
   }
 
-  List<String> _parseWords(String raw, {int? cap}) {
-    final parts = raw.replaceAll(',', '\n').split('\n');
-    final seen = <String>{};
-    final result = <String>[];
-    for (final part in parts) {
-      final word = part.trim();
-      if (word.isEmpty) continue;
-      final key = word.toLowerCase();
-      if (seen.add(key)) {
-        result.add(word);
-      }
-      if (cap != null && result.length >= cap) break;
-    }
-    return result;
+  List<String> _parseWords(String raw) {
+    return WordlistTerms.parse(raw);
   }
 
   Future<void> _save() async {
     final title = _titleController.text.trim();
-    final words = _parseWords(_wordsController.text, cap: _maxWords);
+    final words = _parseWords(_wordsController.text);
+    final maxAllowed = context.read<MonetizationController>().maxWordsPerList;
     if (title.isEmpty) {
       setState(() => _error = 'Bitte einen Titel angeben.');
       return;
     }
     if (words.length < _minWords) {
       setState(() => _error = 'Mindestens $_minWords Wörter erforderlich.');
+      return;
+    }
+    if (words.length > maxAllowed) {
+      await showPremiumPaywall(
+        context,
+        trigger: PaywallTrigger.wordLimit,
+        message: 'Maximal $maxAllowed Wörter pro Liste.',
+      );
+      if (!mounted) return;
+      setState(() => _error = 'Maximal $maxAllowed Wörter pro Liste.');
       return;
     }
 
@@ -2396,6 +2397,7 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final maxAllowed = context.watch<MonetizationController>().maxWordsPerList;
     final canSave =
         _titleController.text.trim().isNotEmpty && _wordCount >= _minWords;
 
@@ -2471,11 +2473,12 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '$_wordCount / $_maxWords',
+                              '$_wordCount / $maxAllowed',
                               style: GoogleFonts.nunito(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: _wordCount >= _minWords
+                                color: _wordCount >= _minWords &&
+                                        _wordCount <= maxAllowed
                                     ? StirnratenColors.categoryMuted
                                     : const Color(0xFFEF4444),
                               ),
@@ -2497,6 +2500,18 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: const Color(0xFFEF4444),
+                            ),
+                          ),
+                        if (_wordCount > maxAllowed)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              'Maximal $maxAllowed Wörter pro Liste.',
+                              style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFEF4444),
+                              ),
                             ),
                           ),
                         if (_error != null)

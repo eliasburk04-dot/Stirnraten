@@ -14,8 +14,8 @@ Anforderungen:
 6. Mobile und Desktop sauber responsiv.
 7. Seitenstruktur soll weiterhin nach IT-Firma aussehen; die rechtlichen Links dürfen nicht wie ein zentraler Website-Fokus wirken.
 8. Verlinke auf folgende Ziele:
-   - Datenschutz: https://burk-solutions-portfolio.vercel.app/datenschutz
-   - Impressum: https://burk-solutions-portfolio.vercel.app/impressum
+   - Datenschutz: https://burk-solutions-portfolio.vercel.app/stirnraten/datenschutz
+   - Impressum: https://burk-solutions-portfolio.vercel.app/stirnraten/impressum
 9. Keine Änderung am visuellen Kern-Branding der Website.
 10. Gib mir den finalen Code als Patch mit kurzer Begründung je betroffener Datei.
 ```

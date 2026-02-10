@@ -64,6 +64,16 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
+function berlinDateKey(now: Date = new Date()): string {
+  // en-CA gives YYYY-MM-DD reliably.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 function normalizeItems(items: unknown, requestedCount: number): string[] {
   if (!Array.isArray(items)) return [];
   const out: string[] = [];
@@ -281,9 +291,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // Verify the JWT (anonymous sessions are authenticated as well).
+  let sb: any;
   try {
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
-    const sb = createClient(supabaseUrl, supabaseAnon, {
+    sb = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: `Bearer ${bearer}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -315,7 +326,38 @@ Deno.serve(async (req: Request) => {
   if (difficulty !== "easy" && difficulty !== "medium" && difficulty !== "hard") {
     return json(400, { error: "invalid_difficulty" });
   }
-  const requestedCount = clamp(Number.isFinite(count) ? count : 0, 5, 100);
+  const dateKey = berlinDateKey();
+
+  // Server-side guardrails:
+  // - Free quota: 3 generations/day (Europe/Berlin date key), atomic via RPC.
+  // - Premium: unlimited quota, max 100 items/list.
+  let isPremium = false;
+  let quotaAllowed = true;
+  let used = 0;
+  let limit = 3;
+  try {
+    const { data, error } = await sb.rpc("consume_ai_generation", { p_date_key: dateKey });
+    if (error) {
+      return json(500, { error: "quota_check_failed", detail: String(error.message ?? error) });
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    isPremium = Boolean(row?.is_premium);
+    quotaAllowed = Boolean(row?.allowed);
+    used = Number(row?.used ?? 0);
+    limit = Number(row?.limit ?? 3);
+  } catch (e) {
+    return json(500, { error: "quota_check_failed", detail: String(e) });
+  }
+
+  if (!quotaAllowed && !isPremium) {
+    return json(402, {
+      error: "quota_exceeded",
+      usage: { date_key: dateKey, used, limit },
+    });
+  }
+
+  const maxItems = isPremium ? 100 : 20;
+  const requestedCount = clamp(Number.isFinite(count) ? count : 0, 5, maxItems);
 
   const groqApiKey = Deno.env.get("GROQ_API_KEY") ?? "";
   if (!groqApiKey) {
@@ -350,7 +392,10 @@ Deno.serve(async (req: Request) => {
         await sleep(900);
         continue;
       }
-      return json(429, { error: "rate_limited" });
+      return json(429, {
+        error: "rate_limited",
+        usage: { date_key: dateKey, used, limit, premium: isPremium },
+      });
     }
     if ((raw as any)?.__error) {
       const status = Number((raw as any)?.status ?? 0);
@@ -360,21 +405,38 @@ Deno.serve(async (req: Request) => {
         error: "upstream_error",
         upstream_status: Number.isFinite(status) ? status : 0,
         detail,
+        usage: { date_key: dateKey, used, limit, premium: isPremium },
       });
     }
 
     const payload = extractAIResponsePayload(raw);
     if (!payload) {
-      return json(502, { error: "invalid_ai_response" });
+      return json(502, {
+        error: "invalid_ai_response",
+        usage: { date_key: dateKey, used, limit, premium: isPremium },
+      });
     }
 
     const title = String(payload.title ?? "").trim() || `${topic} (${difficulty})`;
     const items = normalizeItems(payload.items, requestedCount);
     if (items.length < 5) {
-      return json(502, { error: "too_few_items", count: items.length });
+      return json(502, {
+        error: "too_few_items",
+        count: items.length,
+        usage: { date_key: dateKey, used, limit, premium: isPremium },
+      });
     }
-    return json(200, { title, language, items });
+    return json(200, {
+      title,
+      language,
+      items,
+      usage: { date_key: dateKey, used, limit, premium: isPremium },
+      max_items: maxItems,
+    });
   }
 
-  return json(500, { error: "unexpected" });
+  return json(500, {
+    error: "unexpected",
+    usage: { date_key: dateKey, used, limit, premium: isPremium },
+  });
 });

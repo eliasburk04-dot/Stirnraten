@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'monetization/monetization_controller.dart';
 import 'screens/home_screen.dart';
 import 'services/sound_service.dart';
 import 'services/supabase_bootstrap.dart';
@@ -24,6 +25,9 @@ class StirnratenApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => EffectsController()..startMonitoring(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => MonetizationController()..init(),
         ),
         Provider(
           create: (context) => SoundService(),

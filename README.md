@@ -44,13 +44,18 @@ vercel deploy --prebuilt
 - Funktioniert offline auf Web und iOS.
 
 ## App-Modell
-- Die App wird aktuell vollständig kostenlos veröffentlicht.
-- Es gibt keine In-App-Käufe oder Paywall.
+- Free: voll spielbar (alle Kategorien/Modi), eigene Listen, KI-Limits (3/Tag), max. 20 Wörter pro Liste.
+- Premium (Lifetime): unbegrenzte KI, max. 100 Wörter pro Liste.
+- Keine Werbung.
 
 ## KI-Wörterlisten
 - Setup und Supabase-Migration: `docs/ai_wordlist_setup.md`
 - Supabase SQL (CLI Migration): `supabase/migrations/20260209170000_wordlists_ai.sql`
 - Supabase Auth: Anonymous (kein Login im UI).
+
+## Monetization
+- Setup: `docs/monetization_setup.md`
+- Manuelle Tests: `docs/monetization_manual_test_checklist.md`
 
 ## Notes
 This project is platform-neutral and does not require any Replit-specific configuration.

@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../monetization/monetization_controller.dart';
+import '../monetization/premium_sheet.dart';
 import '../services/sound_service.dart';
 import '../utils/effects_quality.dart';
 import '../widgets/glass_widgets.dart';
@@ -931,6 +933,12 @@ class _InfoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final monetization = context.watch<MonetizationController>();
+    final usage = monetization.localAiUsageToday();
+    final premiumSubtitle = monetization.isPremium
+        ? 'Aktiv'
+        : 'Nicht aktiv • KI heute: ${usage.remaining} frei';
+
     return SafeArea(
       top: false,
       child: Container(
@@ -978,6 +986,16 @@ class _InfoSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
+            _InfoLinkTile(
+              title: 'Premium',
+              subtitle: premiumSubtitle,
+              icon: Icons.workspace_premium_rounded,
+              onTap: () {
+                Navigator.pop(context);
+                showPremiumSheet(context);
+              },
+            ),
+            const SizedBox(height: 10),
             _InfoLinkTile(
               title: 'Datenschutzerklärung',
               subtitle: 'Auf der Burk-Solutions-Website',

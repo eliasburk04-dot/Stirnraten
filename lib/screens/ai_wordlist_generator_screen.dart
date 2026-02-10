@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../monetization/ai_usage_snapshot.dart';
+import '../monetization/monetization_controller.dart';
+import '../monetization/premium_paywall.dart';
 import '../services/ai_wordlist_service.dart';
 import '../services/supabase_wordlist_repository.dart';
 import '../theme/stirnraten_colors.dart';
@@ -29,6 +35,9 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   late final TextEditingController _titleController;
   final List<TextEditingController> _previewControllers =
       <TextEditingController>[];
+  String? _lastAppliedUsageToken;
+  String? _lastQuotaPaywallToken;
+  String? _lastTrimNoticeToken;
 
   @override
   void initState() {
@@ -84,6 +93,16 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   }
 
   Future<void> _save() async {
+    final monetization = context.read<MonetizationController>();
+    final maxAllowed = monetization.maxWordsPerList;
+    if (_vm.previewItems.length > maxAllowed) {
+      await showPremiumPaywall(
+        context,
+        trigger: PaywallTrigger.wordLimit,
+        message: 'Maximal $maxAllowed Wörter pro Liste.',
+      );
+      return;
+    }
     final saved = await _vm.save();
     if (!mounted) return;
     if (saved != null) {
@@ -97,11 +116,69 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     }
   }
 
+  Future<void> _generate() async {
+    final monetization = context.read<MonetizationController>();
+    if (!monetization.canStartAiGenerationLocally() && !monetization.isPremium) {
+      await showPremiumPaywall(
+        context,
+        trigger: PaywallTrigger.aiQuota,
+        message: 'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+      );
+      return;
+    }
+    if (monetization.isPremium) {
+      await monetization.syncPremiumToSupabase();
+    }
+    await _vm.generate();
+  }
+
+  void _applyUsageIfPresent(AiUsageSnapshot? usage) {
+    if (usage == null) return;
+    final token = '${usage.dateKey}:${usage.used}:${usage.limit}';
+    if (_lastAppliedUsageToken == token) return;
+    _lastAppliedUsageToken = token;
+    unawaited(context.read<MonetizationController>().applyServerAiUsage(usage));
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _vm,
       builder: (context, _) {
+        final maxAllowed = context.watch<MonetizationController>().maxWordsPerList;
+        _applyUsageIfPresent(_vm.lastUsage);
+        if (_vm.lastErrorWasQuotaExceeded) {
+          final usage = _vm.lastUsage;
+          final token =
+              '${usage?.dateKey ?? 'na'}:${usage?.used ?? -1}:${_vm.errorMessage ?? ''}';
+          if (_lastQuotaPaywallToken != token) {
+            _lastQuotaPaywallToken = token;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              showPremiumPaywall(
+                context,
+                trigger: PaywallTrigger.aiQuota,
+                message: _vm.errorMessage ??
+                    'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+              );
+            });
+          }
+        }
+        if (_vm.previewItems.length > maxAllowed) {
+          final token = '${_vm.previewItems.length}:$maxAllowed';
+          if (_lastTrimNoticeToken != token) {
+            _lastTrimNoticeToken = token;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Auf $maxAllowed Wörter gekürzt.'),
+                ),
+              );
+              _vm.enforceMaxItems(maxAllowed);
+            });
+          }
+        }
         _syncPreviewControllers();
         return Scaffold(
           body: Stack(
@@ -286,7 +363,7 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                               onTap: _vm.previewItems.isNotEmpty
                                   ? (_vm.canSave ? _save : null)
                                   : (_vm.canGenerate
-                                      ? () => _vm.generate()
+                                      ? _generate
                                       : null),
                             ),
                           ),

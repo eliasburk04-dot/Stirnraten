@@ -36,7 +36,7 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
     case LegalDocumentType.datenschutzerklaerung:
       return const LegalDocument(
         title: 'Datenschutzerklärung',
-        stand: '09.02.2026',
+        stand: '10.02.2026',
         intro: <String>[
           'Diese Datenschutzerklärung informiert über die Verarbeitung '
               'personenbezogener Daten bei der Nutzung der App „Stirnraten“.',
@@ -62,55 +62,84 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
           LegalSection(
             title: '3. Verarbeitete Daten in der App',
             paragraphs: <String>[
-              'Die App ist auf lokale Nutzung ausgelegt. Spielstände und '
-                  'Einstellungen werden lokal auf dem Gerät gespeichert.',
+              'Viele Daten werden lokal auf deinem Gerät gespeichert '
+                  '(offline-first). Zusätzlich werden für KI-Listen und '
+                  'Cloud-Sync serverseitige Dienste genutzt.',
             ],
             bullets: <String>[
               'Lokale Spiel- und Einstellungsdaten (App-Speicher)',
+              'Manuell erstellte Wortlisten (lokal)',
               'Sensorwerte (z. B. Beschleunigungssensor) für die '
                   'Spielsteuerung',
-              'Keine Registrierung, kein eigenes Nutzerkonto in der App',
+              'Anonyme Supabase Nutzer-ID für KI/Cloud-Funktionen',
             ],
           ),
           LegalSection(
-            title: '4. Monetarisierung',
+            title: '4. Supabase (Cloud, KI, Quota)',
             paragraphs: <String>[
-              'Die App wird aktuell vollständig kostenlos bereitgestellt.',
-              'Es werden keine In-App-Käufe oder bezahlten Freischaltungen '
-                  'angeboten.',
+              'Für KI-Wortlisten und Cloud-Speicherung nutzen wir Supabase '
+                  '(Datenbank, Authentifizierung, Edge Functions).',
+            ],
+            bullets: <String>[
+              'KI-Wortlisten: Titel, Sprache, Begriffe',
+              'KI-Nutzung pro Tag (Quota, Europe/Berlin Datumsschlüssel)',
+              'Premium-Status als serverseitiges Flag zur Limit-Durchsetzung',
             ],
           ),
           LegalSection(
-            title: '5. Zwecke und Rechtsgrundlagen',
+            title: '5. In-App-Käufe (Premium) und RevenueCat',
+            paragraphs: <String>[
+              'Premium wird über Apple App Store bzw. Google Play verkauft. '
+                  'Zur Verwaltung von Käufen/Restores nutzen wir RevenueCat. '
+                  'Zahlungsdaten werden durch den jeweiligen Store verarbeitet.',
+            ],
+          ),
+          LegalSection(
+            title: '6. KI-Wortlisten (Groq, serverseitig)',
+            paragraphs: <String>[
+              'Die KI-Generierung wird serverseitig über eine Supabase Edge '
+                  'Function ausgeführt, die eine KI-API (Groq) aufruft. '
+                  'Übertragen werden typischerweise Thema/Sprache/Schwierigkeit '
+                  'und die gewünschte Anzahl. Bitte keine sensiblen oder '
+                  'personenbezogenen Daten als Prompt eingeben.',
+            ],
+          ),
+          LegalSection(
+            title: '7. Zwecke und Rechtsgrundlagen',
             bullets: <String>[
               'Bereitstellung der App-Funktionen '
                   '(Art. 6 Abs. 1 lit. b DSGVO)',
+              'KI- und Cloud-Funktionen '
+                  '(Art. 6 Abs. 1 lit. b DSGVO)',
               'Technische Stabilität und Sicherheit '
+                  '(Art. 6 Abs. 1 lit. f DSGVO)',
+              'Missbrauchsschutz/Quota '
                   '(Art. 6 Abs. 1 lit. f DSGVO)',
               'Erfüllung gesetzlicher Pflichten '
                   '(Art. 6 Abs. 1 lit. c DSGVO)',
             ],
           ),
           LegalSection(
-            title: '6. Empfänger und Dienstleister',
-            paragraphs: <String>[
-              'Für den App-Vertrieb werden Plattformdienste von Apple bzw. '
-                  'Google genutzt.',
-              'Aktuell kein eigener Backend-Service für die App im produktiven '
-                  'Betrieb.',
-              'Vercel wird für die Portfolio-Website genutzt, nicht für die '
-                  'Spiel-Funktionen innerhalb der mobilen App.',
+            title: '8. Empfänger und Dienstleister',
+            bullets: <String>[
+              'Supabase (Backend: Datenbank, Auth, Edge Functions)',
+              'Groq (KI-API, serverseitig)',
+              'RevenueCat (Kauf-/Entitlement-Verwaltung)',
+              'Apple App Store / Google Play (Kaufabwicklung, Restore)',
             ],
           ),
           LegalSection(
-            title: '7. Speicherdauer',
+            title: '9. Speicherdauer',
             paragraphs: <String>[
               'Lokal gespeicherte Daten verbleiben bis zur Löschung in der '
                   'App oder Deinstallation.',
+              'Cloud-Daten (z. B. KI-Listen/Quota) werden gespeichert, solange '
+                  'sie für die App-Funktionen erforderlich sind oder bis zur '
+                  'Löschung.',
             ],
           ),
           LegalSection(
-            title: '8. Betroffenenrechte',
+            title: '10. Betroffenenrechte',
             bullets: <String>[
               'Auskunft, Berichtigung, Löschung',
               'Einschränkung der Verarbeitung',
@@ -120,7 +149,7 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
             ],
           ),
           LegalSection(
-            title: '9. Änderungen',
+            title: '11. Änderungen',
             paragraphs: <String>[
               'Diese Datenschutzerklärung kann angepasst werden, wenn sich '
                   'Funktionen oder rechtliche Anforderungen ändern.',
@@ -133,7 +162,7 @@ LegalDocument legalDocumentForType(LegalDocumentType type) {
     case LegalDocumentType.impressum:
       return const LegalDocument(
         title: 'Impressum',
-        stand: '09.02.2026',
+        stand: '10.02.2026',
         intro: <String>[
           'Angaben gemäß § 5 DDG.',
         ],

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../monetization/ai_usage_snapshot.dart';
 import 'wordlist_normalizer.dart';
 
 enum AIWordlistDifficulty { easy, medium, hard }
@@ -56,11 +57,13 @@ class AIWordlistResult {
   final String title;
   final String language;
   final List<String> items;
+  final AiUsageSnapshot? usage;
 
   const AIWordlistResult({
     required this.title,
     required this.language,
     required this.items,
+    this.usage,
   });
 }
 
@@ -150,6 +153,24 @@ class AIRateLimitException extends AIWordlistException {
   const AIRateLimitException(super.message, this.retryAfter);
 }
 
+class AIQuotaExceededException extends AIWordlistException {
+  final AiUsageSnapshot? usage;
+
+  const AIQuotaExceededException(
+    super.message, {
+    this.usage,
+  });
+}
+
+class AIWordlistServerException extends AIWordlistException {
+  final AiUsageSnapshot? usage;
+
+  const AIWordlistServerException(
+    super.message, {
+    this.usage,
+  });
+}
+
 enum AIWordlistProgressStage { requesting, parsing, normalizing, done }
 
 class AIWordlistProgress {
@@ -217,6 +238,7 @@ class HttpAIWordlistService implements AIWordlistService {
     final rawPool = <String>[];
     List<String> normalized = <String>[];
     String? effectiveTitle;
+    AiUsageSnapshot? usage;
 
     for (var attempt = 0; attempt < 3; attempt++) {
       final askCount = _computeAskCount(
@@ -266,6 +288,12 @@ class HttpAIWordlistService implements AIWordlistService {
           Duration(seconds: 20),
         );
       }
+      if (response.statusCode == 402) {
+        throw AIQuotaExceededException(
+          'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+          usage: _tryParseUsageFromBody(response.body),
+        );
+      }
       if (response.statusCode == 401) {
         final detail = _extractErrorDetail(response.body);
         throw AIWordlistException(
@@ -277,12 +305,14 @@ class HttpAIWordlistService implements AIWordlistService {
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final detail = _extractErrorDetail(response.body);
-        throw AIWordlistException(
+        throw AIWordlistServerException(
           'KI-Service Fehler (HTTP ${response.statusCode}${detail.isEmpty ? '' : ': $detail'}).',
+          usage: _tryParseUsageFromBody(response.body),
         );
       }
 
       final raw = parseAIResponse(response.body);
+      usage ??= _tryParseUsageFromBody(response.body);
       effectiveTitle ??= raw.title;
       rawPool.addAll(raw.items);
 
@@ -312,6 +342,7 @@ class HttpAIWordlistService implements AIWordlistService {
               '${request.topic.trim()} (${_difficultyLabelDe(request.difficulty)})'),
       language: request.language,
       items: normalized,
+      usage: usage,
     );
   }
 
@@ -472,6 +503,38 @@ class HttpAIWordlistService implements AIWordlistService {
     final snippet =
         trimmed.length > 140 ? '${trimmed.substring(0, 140)}…' : trimmed;
     return snippet.replaceAll(RegExp(r'\\s+'), ' ');
+  }
+
+  static AiUsageSnapshot? _tryParseUsageFromBody(String body) {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map) {
+        final usage = decoded['usage'];
+        if (usage is Map) {
+          final dateKey = (usage['date_key'] ?? usage['dateKey'])?.toString();
+          final usedRaw = usage['used'] ?? usage['count'];
+          final limitRaw = usage['limit'];
+          final used = usedRaw is num ? usedRaw.toInt() : int.tryParse('$usedRaw');
+          final limit =
+              limitRaw is num ? limitRaw.toInt() : int.tryParse('$limitRaw');
+          if (dateKey != null &&
+              dateKey.trim().isNotEmpty &&
+              used != null &&
+              limit != null) {
+            return AiUsageSnapshot(
+              dateKey: dateKey.trim(),
+              used: used,
+              limit: limit,
+            );
+          }
+        }
+      }
+    } catch (_) {
+      // ignore
+    }
+    return null;
   }
 
   @override

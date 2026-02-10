@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../monetization/ai_usage_snapshot.dart';
 import '../services/ai_wordlist_service.dart';
 import '../services/custom_word_storage.dart';
 import '../services/supabase_wordlist_repository.dart';
@@ -31,6 +32,8 @@ class AIWordlistViewModel extends ChangeNotifier {
   bool includeHints = false;
 
   List<String> previewItems = <String>[];
+  AiUsageSnapshot? lastUsage;
+  bool lastErrorWasQuotaExceeded = false;
 
   AIWordlistViewModel({
     required this.aiService,
@@ -74,6 +77,7 @@ class AIWordlistViewModel extends ChangeNotifier {
 
     state = AIWordlistUiState.loading;
     errorMessage = null;
+    lastErrorWasQuotaExceeded = false;
     progress = 0;
     progressLabel = 'Starte ...';
     notifyListeners();
@@ -85,6 +89,7 @@ class AIWordlistViewModel extends ChangeNotifier {
         progressLabel = step.message;
         if (step.result != null) {
           previewItems = step.result!.items;
+          lastUsage = step.result!.usage;
           if (title.trim().isEmpty) {
             title = step.result!.title;
           }
@@ -94,6 +99,18 @@ class AIWordlistViewModel extends ChangeNotifier {
 
       state = AIWordlistUiState.preview;
       errorMessage = null;
+      notifyListeners();
+    } on AIQuotaExceededException catch (error) {
+      state = AIWordlistUiState.error;
+      lastErrorWasQuotaExceeded = true;
+      lastUsage = error.usage;
+      errorMessage = error.message;
+      notifyListeners();
+    } on AIWordlistServerException catch (error) {
+      state = AIWordlistUiState.error;
+      lastErrorWasQuotaExceeded = false;
+      lastUsage = error.usage;
+      errorMessage = error.message;
       notifyListeners();
     } catch (error) {
       state = AIWordlistUiState.error;
@@ -115,6 +132,13 @@ class AIWordlistViewModel extends ChangeNotifier {
   void removeItemAt(int index) {
     if (index < 0 || index >= previewItems.length) return;
     previewItems.removeAt(index);
+    notifyListeners();
+  }
+
+  void enforceMaxItems(int maxItems) {
+    if (maxItems <= 0) return;
+    if (previewItems.length <= maxItems) return;
+    previewItems = previewItems.take(maxItems).toList(growable: false);
     notifyListeners();
   }
 

@@ -104,9 +104,9 @@ function normalizeItems(items: unknown, requestedCount: number): string[] {
     s = s.replace(/\p{Extended_Pictographic}/gu, "").trim();
     if (!s) continue;
 
-    // 1-3 "words" constraint.
+    // Exactly 1 word so requested count maps to visible list size consistently.
     const words = s.split(/\s+/).filter(Boolean);
-    if (words.length < 1 || words.length > 3) continue;
+    if (words.length !== 1) continue;
 
     // No super long terms.
     if (s.length > 64) continue;
@@ -210,7 +210,7 @@ function buildSystemPrompt(req: ClientRequest): string {
 Return STRICT JSON only in this schema:
 {"title":"...","language":"de|en","items":["term1","term2"]}
 Rules:
-- Items: 1-3 words, no sentences
+- Items: exactly 1 word (no spaces), no sentences
 - No duplicates (case-insensitive)
 - No emojis
 - No numbering/bullets
@@ -439,7 +439,7 @@ Deno.serve(async (req: Request) => {
   let normalized: string[] = [];
   let title: string | null = null;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     const askCount = computeAskCount({
       targetCount,
       currentValidCount: normalized.length,

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../monetization/ai_usage_snapshot.dart';
 import '../monetization/monetization_controller.dart';
 import '../monetization/premium_paywall.dart';
+import '../monetization/premium_quota_resolution.dart';
 import '../services/ai_wordlist_service.dart';
 import '../services/supabase_wordlist_repository.dart';
 import '../theme/stirnraten_colors.dart';
@@ -39,6 +40,8 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
   String? _lastAppliedUsageToken;
   String? _lastQuotaPaywallToken;
   String? _lastTrimNoticeToken;
+  String? _lastPremiumQuotaSyncToken;
+  bool _premiumQuotaSyncInFlight = false;
 
   @override
   void initState() {
@@ -104,8 +107,9 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     if (tokenCount > maxAllowed) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).'),
+          content: Text(
+            'Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).',
+          ),
         ),
       );
       await showPremiumPaywall(
@@ -130,7 +134,8 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
 
   Future<void> _generate() async {
     final monetization = context.read<MonetizationController>();
-    if (!monetization.canStartAiGenerationLocally() && !monetization.isPremium) {
+    if (!monetization.canStartAiGenerationLocally() &&
+        !monetization.isPremium) {
       await showPremiumPaywall(
         context,
         trigger: PaywallTrigger.aiQuota,
@@ -141,9 +146,57 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
     await _vm.generate();
   }
 
+  Future<void> _attemptPremiumQuotaRecovery() async {
+    if (_premiumQuotaSyncInFlight) return;
+    _premiumQuotaSyncInFlight = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final monetization = context.read<MonetizationController>();
+
+    try {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Premium wird synchronisiert. Bitte kurz warten ...',
+          ),
+        ),
+      );
+
+      final restored = await monetization.restorePurchases();
+      if (!mounted) return;
+      if (!restored) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Premium-Sync fehlgeschlagen. Bitte "Käufe wiederherstellen" versuchen.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await monetization.syncPremiumFromStore();
+      if (!mounted) return;
+
+      await _vm.generate();
+      if (!mounted) return;
+      if (_vm.lastErrorWasQuotaExceeded) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Premium-Sync noch nicht abgeschlossen. Bitte App neu starten und erneut versuchen.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      _premiumQuotaSyncInFlight = false;
+    }
+  }
+
   void _applyUsageIfPresent(AiUsageSnapshot? usage) {
     if (usage == null) return;
-    final token = '${usage.dateKey}:${usage.used}:${usage.limit}';
+    final token =
+        '${usage.dateKey}:${usage.used}:${usage.limit}:${usage.isPremium}';
     if (_lastAppliedUsageToken == token) return;
     _lastAppliedUsageToken = token;
     unawaited(context.read<MonetizationController>().applyServerAiUsage(usage));
@@ -162,9 +215,14 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
             setState(() => _vm.count = maxAiSelectable);
           });
         }
-        final maxAllowed = context.watch<MonetizationController>().maxWordsPerList;
+        final maxAllowed =
+            context.watch<MonetizationController>().maxWordsPerList;
         _applyUsageIfPresent(_vm.lastUsage);
-        if (_vm.lastErrorWasQuotaExceeded) {
+        final quotaResolution = resolvePremiumQuotaResolution(
+          quotaExceeded: _vm.lastErrorWasQuotaExceeded,
+          isPremium: monetization.isPremium,
+        );
+        if (quotaResolution == PremiumQuotaResolution.showFreeUpsell) {
           final usage = _vm.lastUsage;
           final token =
               '${usage?.dateKey ?? 'na'}:${usage?.used ?? -1}:${_vm.errorMessage ?? ''}';
@@ -178,6 +236,19 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                 message: _vm.errorMessage ??
                     'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
               );
+            });
+          }
+        } else if (quotaResolution ==
+            PremiumQuotaResolution.attemptPremiumRecovery) {
+          final usage = _vm.lastUsage;
+          final token =
+              'premium:${usage?.dateKey ?? 'na'}:${usage?.used ?? -1}:${_vm.errorMessage ?? ''}';
+          if (_lastPremiumQuotaSyncToken != token &&
+              !_premiumQuotaSyncInFlight) {
+            _lastPremiumQuotaSyncToken = token;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              unawaited(_attemptPremiumQuotaRecovery());
             });
           }
         }
@@ -333,9 +404,10 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                                   ),
                                 ),
                                 _CountButton(
-                                  icon: !monetization.isPremium && _vm.count >= 20
-                                      ? Icons.lock_rounded
-                                      : Icons.add_rounded,
+                                  icon:
+                                      !monetization.isPremium && _vm.count >= 20
+                                          ? Icons.lock_rounded
+                                          : Icons.add_rounded,
                                   onTap: monetization.isPremium
                                       ? (_vm.count < 100
                                           ? () => setState(() => _vm.count++)
@@ -345,7 +417,8 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                                           : () async {
                                               await showPremiumPaywall(
                                                 context,
-                                                trigger: PaywallTrigger.wordLimit,
+                                                trigger:
+                                                    PaywallTrigger.wordLimit,
                                                 message:
                                                     'Free: maximal 20 Begriffe pro KI-Liste. Premium: bis zu 100.',
                                               );
@@ -407,9 +480,7 @@ class _AIWordlistGeneratorScreenState extends State<AIWordlistGeneratorScreen> {
                                   : Icons.auto_awesome_rounded,
                               onTap: _vm.previewItems.isNotEmpty
                                   ? (_vm.canSave ? _save : null)
-                                  : (_vm.canGenerate
-                                      ? _generate
-                                      : null),
+                                  : (_vm.canGenerate ? _generate : null),
                             ),
                           ),
                         ],

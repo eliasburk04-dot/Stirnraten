@@ -15,10 +15,10 @@ if [[ ! -f "$DEFINES_FILE" ]]; then
 fi
 
 flutter pub get
+./scripts/generate_ios_xcode_dart_defines.sh
 
 # Generates ios/Flutter/Generated.xcconfig + flutter_export_environment.sh
 # with Release flags and the production dart-defines.
 flutter build ios --release --dart-define-from-file="$DEFINES_FILE"
 
 open ios/Runner.xcworkspace
-

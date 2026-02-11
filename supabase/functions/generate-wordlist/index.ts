@@ -414,7 +414,7 @@ Deno.serve(async (req: Request) => {
   if (!quotaAllowed && !isPremium) {
     return json(402, {
       error: "quota_exceeded",
-      usage: { date_key: dateKey, used, limit },
+      usage: { date_key: dateKey, used, limit, premium: isPremium },
     });
   }
 

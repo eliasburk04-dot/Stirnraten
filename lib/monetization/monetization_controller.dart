@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'ai_usage_snapshot.dart';
@@ -9,6 +10,106 @@ import 'berlin_date.dart';
 import 'daily_quota.dart';
 import 'monetization_limits.dart';
 import 'monetization_prefs.dart';
+
+abstract class MonetizationIapClient {
+  Stream<List<PurchaseDetails>> get purchaseStream;
+  Future<bool> isAvailable();
+  Future<ProductDetailsResponse> queryProductDetails(Set<String> identifiers);
+  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam});
+  Future<void> restorePurchases({String? applicationUserName});
+  Future<void> completePurchase(PurchaseDetails purchase);
+}
+
+class StoreMonetizationIapClient implements MonetizationIapClient {
+  final InAppPurchase _iap;
+
+  StoreMonetizationIapClient(this._iap);
+
+  @override
+  Stream<List<PurchaseDetails>> get purchaseStream => _iap.purchaseStream;
+
+  @override
+  Future<bool> isAvailable() => _iap.isAvailable();
+
+  @override
+  Future<ProductDetailsResponse> queryProductDetails(Set<String> identifiers) =>
+      _iap.queryProductDetails(identifiers);
+
+  @override
+  Future<bool> buyNonConsumable({required PurchaseParam purchaseParam}) =>
+      _iap.buyNonConsumable(purchaseParam: purchaseParam);
+
+  @override
+  Future<void> restorePurchases({String? applicationUserName}) =>
+      _iap.restorePurchases(applicationUserName: applicationUserName);
+
+  @override
+  Future<void> completePurchase(PurchaseDetails purchase) =>
+      _iap.completePurchase(purchase);
+}
+
+abstract class PremiumSyncClient {
+  Future<bool> verifyAndSync({
+    required String platform,
+    required String productId,
+    required String verificationData,
+  });
+}
+
+class SupabasePremiumSyncClient implements PremiumSyncClient {
+  const SupabasePremiumSyncClient();
+
+  @override
+  Future<bool> verifyAndSync({
+    required String platform,
+    required String productId,
+    required String verificationData,
+  }) async {
+    try {
+      final sb = Supabase.instance.client;
+      final res = await sb.functions.invoke(
+        'verify-premium',
+        body: <String, dynamic>{
+          'platform': platform,
+          'productId': productId,
+          'verificationData': verificationData,
+        },
+      );
+      final data = res.data;
+      return data is Map && data['premium'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+abstract class IosReceiptClient {
+  Future<String?> refreshServerVerificationData();
+}
+
+class StoreKitIosReceiptClient implements IosReceiptClient {
+  const StoreKitIosReceiptClient();
+
+  @override
+  Future<String?> refreshServerVerificationData() async {
+    try {
+      final addition = InAppPurchase.instance
+          .getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
+      try {
+        // StoreKit 2 sync; safe to ignore on older setups.
+        await addition.sync();
+      } catch (_) {
+        // ignore
+      }
+      final verificationData = await addition.refreshPurchaseVerificationData();
+      final receipt = verificationData?.serverVerificationData.trim();
+      if (receipt == null || receipt.isEmpty) return null;
+      return receipt;
+    } catch (_) {
+      return null;
+    }
+  }
+}
 
 class MonetizationController extends ChangeNotifier {
   static const String _envIosProductId =
@@ -19,7 +120,9 @@ class MonetizationController extends ChangeNotifier {
       'com.stirnraten.app.premium_lifetime';
 
   final MonetizationPrefs _prefs;
-  final InAppPurchase _iap = InAppPurchase.instance;
+  final MonetizationIapClient _iapClient;
+  final PremiumSyncClient _premiumSyncClient;
+  final IosReceiptClient _iosReceiptClient;
 
   bool _initialized = false;
   bool _iapConfigured = false;
@@ -36,7 +139,16 @@ class MonetizationController extends ChangeNotifier {
 
   MonetizationController({
     MonetizationPrefs? prefs,
-  }) : _prefs = prefs ?? MonetizationPrefs();
+    MonetizationIapClient? iapClient,
+    PremiumSyncClient? premiumSyncClient,
+    IosReceiptClient? iosReceiptClient,
+  })  : _prefs = prefs ?? MonetizationPrefs(),
+        _iapClient =
+            iapClient ?? StoreMonetizationIapClient(InAppPurchase.instance),
+        _premiumSyncClient =
+            premiumSyncClient ?? const SupabasePremiumSyncClient(),
+        _iosReceiptClient =
+            iosReceiptClient ?? const StoreKitIosReceiptClient();
 
   bool get isInitialized => _initialized;
   bool get isPremium => _isPremium;
@@ -49,6 +161,7 @@ class MonetizationController extends ChangeNotifier {
   bool get isPurchaseBusy => _purchaseBusy;
   bool get iapConfigured => _iapConfigured;
   String? get iapStatusMessage => _iapStatusMessage;
+  bool get canAttemptPurchase => currentLifetimeProductId != null;
 
   String? get currentLifetimeProductId {
     final ios = _envIosProductId.trim();
@@ -123,6 +236,10 @@ class MonetizationController extends ChangeNotifier {
   }
 
   Future<void> applyServerAiUsage(AiUsageSnapshot snapshot) async {
+    if (snapshot.isPremium != null && snapshot.isPremium != _isPremium) {
+      _isPremium = snapshot.isPremium!;
+      await _prefs.savePremium(_isPremium);
+    }
     _dailyAiGenerationsDateKey = snapshot.dateKey;
     _dailyAiGenerationsUsed = snapshot.used;
     await _prefs.saveDailyAiUsage(
@@ -139,54 +256,64 @@ class MonetizationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _configureIapIfPossible() async {
+  Future<void> _configureIapIfPossible({bool exposeErrors = false}) async {
     final productId = currentLifetimeProductId;
     if (productId == null) {
       _iapConfigured = false;
-      if (!kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.iOS ||
-              defaultTargetPlatform == TargetPlatform.android)) {
-        _iapStatusMessage = defaultTargetPlatform == TargetPlatform.iOS
-            ? 'IAP Produkt-ID fehlt. Setze IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID.'
-            : 'IAP Produkt-ID fehlt.';
+      if (exposeErrors) {
+        if (!kIsWeb &&
+            (defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.android)) {
+          _iapStatusMessage = defaultTargetPlatform == TargetPlatform.iOS
+              ? 'IAP Produkt-ID fehlt. Setze IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID.'
+              : 'IAP Produkt-ID fehlt.';
+        } else {
+          _iapStatusMessage =
+              'Käufe sind auf dieser Plattform nicht verfügbar.';
+        }
+      } else {
+        _iapStatusMessage = null;
       }
       return;
     }
 
     try {
-      final available = await _iap.isAvailable();
+      final available = await _iapClient.isAvailable();
       if (!available) {
         _iapConfigured = false;
-        _iapStatusMessage = 'Store nicht verfügbar.';
+        _iapStatusMessage = exposeErrors ? 'Store nicht verfügbar.' : null;
         return;
       }
 
       _purchaseSub?.cancel();
-      _purchaseSub = _iap.purchaseStream.listen(
+      _purchaseSub = _iapClient.purchaseStream.listen(
         _handlePurchaseUpdates,
         onError: (_) {},
       );
 
-      final details = await _iap.queryProductDetails(<String>{productId});
+      final details = await _iapClient.queryProductDetails(<String>{productId});
       if (details.error != null) {
         _iapConfigured = false;
-        _iapStatusMessage = 'Produktabfrage fehlgeschlagen.';
+        _iapStatusMessage =
+            exposeErrors ? 'Produktabfrage fehlgeschlagen.' : null;
         return;
       }
       _premiumProduct =
           details.productDetails.isEmpty ? null : details.productDetails.first;
 
       _iapConfigured = _premiumProduct != null;
-      _iapStatusMessage = _iapConfigured ? null : 'Produkt nicht verfügbar.';
+      _iapStatusMessage = _iapConfigured
+          ? null
+          : (exposeErrors ? 'Produkt nicht verfügbar.' : null);
     } catch (e) {
       _iapConfigured = false;
-      _iapStatusMessage = 'IAP nicht verfügbar: $e';
+      _iapStatusMessage = exposeErrors ? 'IAP nicht verfügbar: $e' : null;
     }
   }
 
   Future<bool> buyPremium() async {
     final productId = currentLifetimeProductId;
-    if (!_iapConfigured || productId == null) {
+    if (productId == null) {
       _iapStatusMessage = 'Käufe sind nicht konfiguriert.';
       notifyListeners();
       return false;
@@ -198,6 +325,10 @@ class MonetizationController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (!_iapConfigured || _premiumProduct == null) {
+        await _configureIapIfPossible(exposeErrors: true);
+      }
+
       final product = _premiumProduct;
       if (product == null) {
         _iapStatusMessage = 'Produkt nicht verfügbar.';
@@ -205,7 +336,7 @@ class MonetizationController extends ChangeNotifier {
         return false;
       }
 
-      final ok = await _iap.buyNonConsumable(
+      final ok = await _iapClient.buyNonConsumable(
         purchaseParam: PurchaseParam(productDetails: product),
       );
       if (!ok) {
@@ -226,7 +357,7 @@ class MonetizationController extends ChangeNotifier {
   }
 
   Future<bool> restorePurchases() async {
-    if (!_iapConfigured) {
+    if (currentLifetimeProductId == null) {
       _iapStatusMessage = 'Käufe sind nicht konfiguriert.';
       notifyListeners();
       return false;
@@ -237,7 +368,21 @@ class MonetizationController extends ChangeNotifier {
     _iapStatusMessage = null;
     notifyListeners();
     try {
-      await _iap.restorePurchases();
+      if (!_iapConfigured) {
+        await _configureIapIfPossible(exposeErrors: true);
+      }
+      if (!_iapConfigured) {
+        _iapStatusMessage = 'Produkt nicht verfügbar.';
+        notifyListeners();
+        return false;
+      }
+      await _iapClient.restorePurchases();
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final synced = await syncPremiumFromStore();
+        if (!synced && !_isPremium) {
+          return false;
+        }
+      }
       // Restores will flow through purchaseStream handler.
       return true;
     } catch (e) {
@@ -248,6 +393,28 @@ class MonetizationController extends ChangeNotifier {
       _purchaseBusy = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> syncPremiumFromStore() async {
+    final productId = currentLifetimeProductId;
+    if (productId == null) return false;
+    if (defaultTargetPlatform != TargetPlatform.iOS) return false;
+
+    final verified = await _verifyWithFreshIosReceipt(productId: productId);
+    if (verified) {
+      await setPremium(true);
+      _iapStatusMessage = null;
+      notifyListeners();
+      return true;
+    }
+
+    if (!_isPremium) {
+      _iapStatusMessage = 'Premium konnte nicht synchronisiert werden.';
+    } else {
+      _iapStatusMessage = 'Premium-Verifizierung fehlgeschlagen.';
+    }
+    notifyListeners();
+    return false;
   }
 
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
@@ -268,62 +435,99 @@ class MonetizationController extends ChangeNotifier {
             'Kauf fehlgeschlagen: ${purchase.error?.message ?? 'Unbekannter Fehler'}';
         notifyListeners();
         if (purchase.pendingCompletePurchase) {
-          await _iap.completePurchase(purchase);
+          await _iapClient.completePurchase(purchase);
         }
         continue;
       }
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        // Immediate local unlock for UX; backend verification happens next.
-        await setPremium(true);
-
-        final verified = await _verifyAndSyncToSupabase(
-          platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+        final platform =
+            defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
+        final verified = await _verifyAndSyncWithFallback(
+          platform: platform,
           productId: expectedProductId,
-          verificationData: purchase.verificationData.serverVerificationData,
+          primaryVerificationData:
+              purchase.verificationData.serverVerificationData,
         );
 
-        if (!verified) {
-          _iapStatusMessage =
-              'Premium gekauft. Verifizierung läuft oder ist fehlgeschlagen.';
+        if (verified) {
+          await setPremium(true);
+          _iapStatusMessage = null;
           notifyListeners();
         } else {
-          _iapStatusMessage = null;
+          _iapStatusMessage =
+              'Kauf erkannt, aber Verifizierung fehlgeschlagen. Bitte "Käufe wiederherstellen" erneut ausführen.';
           notifyListeners();
         }
 
         if (purchase.pendingCompletePurchase) {
-          await _iap.completePurchase(purchase);
+          await _iapClient.completePurchase(purchase);
         }
       }
     }
   }
 
-  Future<bool> _verifyAndSyncToSupabase({
+  Future<bool> _verifyAndSyncWithFallback({
     required String platform,
     required String productId,
-    required String verificationData,
+    required String primaryVerificationData,
   }) async {
-    try {
-      final sb = Supabase.instance.client;
-      final res = await sb.functions.invoke(
-        'verify-premium',
-        body: <String, dynamic>{
-          'platform': platform,
-          'productId': productId,
-          'verificationData': verificationData,
-        },
-      );
-      final data = res.data;
-      if (data is Map && data['premium'] == true) {
-        await setPremium(true);
-        return true;
-      }
-      return false;
-    } catch (_) {
-      return false;
+    final verificationData = primaryVerificationData.trim();
+    final primaryLooksLikeSk2Jws =
+        platform == 'ios' && _looksLikeStoreKit2Jws(verificationData);
+
+    if (primaryLooksLikeSk2Jws) {
+      final ok = await _verifyWithFreshIosReceipt(productId: productId);
+      if (ok) return true;
     }
+
+    if (verificationData.isNotEmpty) {
+      final ok = await _premiumSyncClient.verifyAndSync(
+        platform: platform,
+        productId: productId,
+        verificationData: verificationData,
+      );
+      if (ok) return true;
+    }
+
+    if (platform == 'ios') {
+      return _verifyWithFreshIosReceipt(productId: productId);
+    }
+
+    return false;
+  }
+
+  Future<bool> _verifyWithFreshIosReceipt({required String productId}) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final refreshed = await _iosReceiptClient.refreshServerVerificationData();
+      final receipt = refreshed?.trim();
+      if (receipt == null || receipt.isEmpty) {
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          continue;
+        }
+        return false;
+      }
+      final ok = await _premiumSyncClient.verifyAndSync(
+        platform: 'ios',
+        productId: productId,
+        verificationData: receipt,
+      );
+      if (ok) return true;
+      if (attempt == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+    }
+    return false;
+  }
+
+  bool _looksLikeStoreKit2Jws(String verificationData) {
+    if (verificationData.isEmpty) return false;
+    final parts = verificationData.split('.');
+    if (parts.length != 3) return false;
+    final b64Url = RegExp(r'^[A-Za-z0-9\-_]+$');
+    return parts.every((part) => part.isNotEmpty && b64Url.hasMatch(part));
   }
 
   @override

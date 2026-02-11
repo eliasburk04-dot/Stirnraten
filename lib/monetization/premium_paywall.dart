@@ -28,11 +28,11 @@ Future<void> showPremiumPaywall(
       return Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-          child: GlassBackdrop(
+        child: GlassBackdrop(
           blurSigma: blurSigma,
           enableBlur: effects.allowBlur,
           borderRadius: BorderRadius.circular(28),
-            child: Container(
+          child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: StirnratenColors.categoryGlass,
@@ -84,7 +84,8 @@ class _PaywallContent extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: StirnratenColors.categoryPrimary.withValues(alpha: 0.18),
                 border: Border.all(
-                  color: StirnratenColors.categoryPrimary.withValues(alpha: 0.25),
+                  color:
+                      StirnratenColors.categoryPrimary.withValues(alpha: 0.25),
                 ),
               ),
               child: const Icon(
@@ -193,7 +194,7 @@ class _PaywallContent extends StatelessWidget {
                 icon: Icons.lock_open_rounded,
                 onTap: monetization.isPurchaseBusy ||
                         isPremium ||
-                        !monetization.iapConfigured
+                        !monetization.canAttemptPurchase
                     ? null
                     : () async {
                         final ok = await monetization.buyPremium();

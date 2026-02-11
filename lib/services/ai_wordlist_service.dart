@@ -207,7 +207,8 @@ class SupabaseAIWordlistService implements AIWordlistService {
   final SupabaseClient _client;
   final SupabaseAuthService _auth;
 
-  SupabaseAIWordlistService(this._client) : _auth = SupabaseAuthService(_client);
+  SupabaseAIWordlistService(this._client)
+      : _auth = SupabaseAuthService(_client);
 
   static SupabaseAIWordlistService? fromInitializedClient() {
     try {
@@ -245,7 +246,8 @@ class SupabaseAIWordlistService implements AIWordlistService {
     // "Invalid JWT" on the server.
     try {
       final token = (_client.auth.currentSession?.accessToken ?? '').trim();
-      final looksLikeJwt = token.startsWith('eyJ') && token.split('.').length >= 3;
+      final looksLikeJwt =
+          token.startsWith('eyJ') && token.split('.').length >= 3;
       if (!looksLikeJwt) {
         await _client.auth.signOut(scope: SignOutScope.local);
         final ok = await _auth.ensureAnonymousSession(
@@ -363,7 +365,8 @@ class SupabaseAIWordlistService implements AIWordlistService {
         } on FunctionException catch (e2) {
           if (e2.status == 401) {
             final detail = e2.details is Map
-                ? ((e2.details as Map)['error'] ?? (e2.details as Map)['message'])
+                ? ((e2.details as Map)['error'] ??
+                        (e2.details as Map)['message'])
                     ?.toString()
                 : null;
             throw AIWordlistException(
@@ -419,7 +422,9 @@ class SupabaseAIWordlistService implements AIWordlistService {
     );
 
     return AIWordlistResult(
-      title: request.title?.trim().isNotEmpty == true ? request.title!.trim() : raw.title,
+      title: request.title?.trim().isNotEmpty == true
+          ? request.title!.trim()
+          : raw.title,
       language: raw.language,
       items: normalized,
       usage: usage,
@@ -779,8 +784,15 @@ class HttpAIWordlistService implements AIWordlistService {
     final dateKey = (usage['date_key'] ?? usage['dateKey'])?.toString();
     final usedRaw = usage['used'] ?? usage['count'];
     final limitRaw = usage['limit'];
+    final premiumRaw = usage['premium'] ?? usage['is_premium'];
     final used = usedRaw is num ? usedRaw.toInt() : int.tryParse('$usedRaw');
-    final limit = limitRaw is num ? limitRaw.toInt() : int.tryParse('$limitRaw');
+    final limit =
+        limitRaw is num ? limitRaw.toInt() : int.tryParse('$limitRaw');
+    final isPremium = premiumRaw is bool
+        ? premiumRaw
+        : (premiumRaw == null
+            ? null
+            : ('$premiumRaw'.toLowerCase() == 'true' ? true : false));
     if (dateKey == null || dateKey.trim().isEmpty) return null;
     if (used == null || limit == null) return null;
 
@@ -788,6 +800,7 @@ class HttpAIWordlistService implements AIWordlistService {
       dateKey: dateKey.trim(),
       used: used,
       limit: limit,
+      isPremium: isPremium,
     );
   }
 

@@ -66,11 +66,10 @@ else
 fi
 
 echo "==> Validate required iOS keys in Info.plist"
-"$PLIST_BUDDY" -c "Print :UIApplicationSceneManifest" "$PLIST" >/dev/null
 "$PLIST_BUDDY" -c "Print :NSMotionUsageDescription" "$PLIST" >/dev/null
 "$PLIST_BUDDY" -c "Print :ITSAppUsesNonExemptEncryption" "$PLIST" >/dev/null
 
-echo "==> Validate Scene delegate class"
-"$PLIST_BUDDY" -c "Print :UIApplicationSceneManifest:UISceneConfigurations:UIWindowSceneSessionRoleApplication:0:UISceneDelegateClassName" "$PLIST" | grep -q "FlutterSceneDelegate"
+echo "==> Validate launch storyboard entry"
+"$PLIST_BUDDY" -c "Print :UILaunchStoryboardName" "$PLIST" >/dev/null
 
 echo "==> Preflight passed"

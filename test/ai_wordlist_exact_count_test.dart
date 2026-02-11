@@ -74,11 +74,16 @@ void main() {
     expect(calls.length, 2);
 
     // Follow-up request should contain an exclude list in instructions.
-    final secondInstructions = (calls[1]['instructions'] as String).toLowerCase();
-    expect(secondInstructions.contains('do not include any terms from'), isTrue);
+    final secondInstructions =
+        (calls[1]['instructions'] as String).toLowerCase();
+    expect(
+      secondInstructions.contains('do not include any terms from'),
+      isTrue,
+    );
   });
 
-  test('AI wordlist generation throws if it cannot reach requested count', () async {
+  test('AI wordlist generation throws if it cannot reach requested count',
+      () async {
     final client = MockClient((req) async {
       return http.Response(
         jsonEncode(<String, dynamic>{
@@ -113,5 +118,49 @@ void main() {
       throwsA(isA<AIWordlistException>()),
     );
   });
-}
 
+  test('AI wordlist generation maps usage premium flag from server response',
+      () async {
+    final client = MockClient((req) async {
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'title': 'Test',
+          'language': 'de',
+          'items': <String>['Tor', 'Ecke', 'Abseits', 'Elfmeter', 'Trainer'],
+          'usage': <String, dynamic>{
+            'date_key': '2026-02-11',
+            'used': 5,
+            'limit': 999,
+            'premium': true,
+          },
+        }),
+        200,
+        headers: const <String, String>{'content-type': 'application/json'},
+      );
+    });
+
+    final service = HttpAIWordlistService(
+      config: AIWordlistApiConfig(
+        endpoint: Uri.parse('https://example.com/ai'),
+        appToken: 'APP_TOKEN_TEST',
+        supabaseAnonKey: '',
+      ),
+      client: client,
+    );
+
+    final result = await service.generateWordlistResult(
+      request: const AIWordlistRequest(
+        topic: 'Fußball',
+        language: 'de',
+        difficulty: AIWordlistDifficulty.easy,
+        count: 5,
+      ),
+    );
+
+    expect(result.usage, isNotNull);
+    expect(result.usage!.dateKey, '2026-02-11');
+    expect(result.usage!.used, 5);
+    expect(result.usage!.limit, 999);
+    expect(result.usage!.isPremium, isTrue);
+  });
+}

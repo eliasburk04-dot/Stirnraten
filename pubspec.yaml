@@ -31,6 +31,7 @@ dependencies:
   http: ^1.2.2
   supabase_flutter: ^2.8.3
   in_app_purchase: ^3.2.3
+  in_app_purchase_storekit: ^0.4.7
 
 dev_dependencies:
   flutter_test:

@@ -42,13 +42,19 @@ function json(status: number, body: unknown) {
 function getBearer(req: Request): string | null {
   const raw = req.headers.get("authorization") ?? req.headers.get("Authorization");
   if (!raw) return null;
-  const m = raw.match(/^Bearer\\s+(.+)$/i);
+  const m = raw.match(/^Bearer\s+(.+)$/i);
   return m ? m[1].trim() : null;
 }
 
 function assertAuth(token: string) {
   const parts = token.split(".");
   if (parts.length !== 3) throw new Error("invalid_jwt");
+}
+
+function looksLikeJws(input: string): boolean {
+  const parts = input.split(".");
+  if (parts.length !== 3) return false;
+  return parts.every((part) => /^[A-Za-z0-9\-_]+$/.test(part));
 }
 
 async function verifyIosReceipt(args: {
@@ -96,12 +102,6 @@ async function verifyIosReceipt(args: {
     const pid = String(entry?.product_id ?? "").trim();
     return pid === args.expectedProductId;
   });
-}
-
-function base64UrlToBase64(input: string) {
-  // Convert base64url to base64.
-  const pad = "=".repeat((4 - (input.length % 4)) % 4);
-  return (input + pad).replace(/-/g, "+").replace(/_/g, "/");
 }
 
 async function googleAccessTokenFromServiceAccount(serviceAccount: any) {
@@ -244,6 +244,27 @@ Deno.serve(async (req: Request) => {
   }
   const userId = String(authData.user.id).trim();
 
+  const admin = createClient(supabaseUrl, supabaseServiceRole, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // Lifetime IAP is non-expiring. Never downgrade existing premium entitlement
+  // due to a transient verify failure or an unsupported verification payload.
+  const { data: existingProfile, error: profileReadError } = await admin
+    .from("profiles")
+    .select("premium")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (profileReadError) {
+    return json(500, {
+      error: "profile_read_failed",
+      detail: String(profileReadError.message ?? profileReadError),
+    });
+  }
+  if (existingProfile?.premium === true) {
+    return json(200, { premium: true, source: "profile_cache" });
+  }
+
   let body: any = null;
   try {
     body = await req.json();
@@ -253,7 +274,7 @@ Deno.serve(async (req: Request) => {
 
   const platform = String(body?.platform ?? "").trim().toLowerCase() as Platform;
   const productId = String(body?.productId ?? "").trim();
-  const verificationData = String(body?.verificationData ?? "").trim();
+  const verificationData = String(body?.verificationData ?? "").replace(/\s+/g, "");
   if ((platform !== "ios" && platform !== "android") || !productId || !verificationData) {
     return json(400, { error: "invalid_payload" });
   }
@@ -261,6 +282,13 @@ Deno.serve(async (req: Request) => {
   let premium = false;
   try {
     if (platform === "ios") {
+      if (looksLikeJws(verificationData)) {
+        return json(422, {
+          error: "ios_jws_requires_receipt_refresh",
+          detail:
+            "StoreKit2 JWS detected. Client must send refreshed App Store receipt for verifyReceipt API.",
+        });
+      }
       const sharedSecret = (Deno.env.get("APPLE_VERIFY_RECEIPT_SHARED_SECRET") ?? "").trim();
       premium = await verifyIosReceipt({
         receiptData: verificationData,
@@ -286,18 +314,18 @@ Deno.serve(async (req: Request) => {
     return json(502, { error: "verify_failed", detail: String(e).slice(0, 240) });
   }
 
-  const admin = createClient(supabaseUrl, supabaseServiceRole, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  if (!premium) {
+    return json(402, { error: "purchase_not_verified", premium: false });
+  }
 
   const { error: upsertError } = await admin.from("profiles").upsert({
     user_id: userId,
-    premium,
+    premium: true,
     updated_at: new Date().toISOString(),
   });
   if (upsertError) {
     return json(500, { error: "profile_upsert_failed", detail: String(upsertError.message ?? upsertError) });
   }
 
-  return json(200, { premium });
+  return json(200, { premium: true });
 });

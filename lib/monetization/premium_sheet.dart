@@ -75,7 +75,8 @@ class _PremiumSheet extends StatelessWidget {
             const _FeatureRow(
               icon: Icons.auto_awesome_rounded,
               title: 'Unbegrenzte KI-Listen',
-              subtitle: 'Free: ${MonetizationLimits.freeDailyAiGenerations} pro Tag',
+              subtitle:
+                  'Free: ${MonetizationLimits.freeDailyAiGenerations} pro Tag',
             ),
             const SizedBox(height: 10),
             const _FeatureRow(
@@ -87,7 +88,8 @@ class _PremiumSheet extends StatelessWidget {
             if (monetization.iapStatusMessage != null) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(14),
@@ -123,12 +125,14 @@ class _PremiumSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: _SheetButton(
-                    title: monetization.isPremium ? 'Premium aktiv' : 'Premium kaufen',
+                    title: monetization.isPremium
+                        ? 'Premium aktiv'
+                        : 'Premium kaufen',
                     icon: Icons.workspace_premium_rounded,
                     primary: true,
                     onTap: monetization.isPremium ||
                             monetization.isPurchaseBusy ||
-                            !monetization.iapConfigured
+                            !monetization.canAttemptPurchase
                         ? null
                         : () async {
                             final ok = await monetization.buyPremium();

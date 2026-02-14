@@ -622,6 +622,50 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     });
   }
 
+  Future<void> _showExitGameConfirmDialog() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => const _ExitGameConfirmDialog(),
+    );
+    if (shouldExit != true || !mounted) return;
+    _exitGameToMainMenu();
+  }
+
+  void _exitGameToMainMenu() {
+    // Keep cleanup explicit so game resources are released before navigating back.
+    _gameTimer?.cancel();
+    _countdownTimer?.cancel();
+    _countdownStartStopTimer?.cancel();
+    _feedbackTimer?.cancel();
+    _sensorAvailabilityTimer?.cancel();
+    _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
+    _tiltController.stop();
+
+    if (_timerBlinkOn.value) {
+      _timerBlinkOn.value = false;
+    }
+
+    context.read<SoundService>().stopCountdownStart();
+    context.read<SoundService>().stopCountdown();
+
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+
+    setState(() {
+      _feedbackColor = null;
+      _feedbackMessage = null;
+      _showFallbackButtons = false;
+      _endCountdownStarted = false;
+      _selectedCategories.clear();
+      _engine.resetToSetup();
+    });
+
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -647,11 +691,14 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   List<CategoryCardData> _buildCategoryItems() {
+    // Own + AI lists must stay pinned to the first position.
     final ordered = List<StirnratenCategory>.from(StirnratenCategory.values);
     ordered.remove(StirnratenCategory.ownWords);
-    ordered.add(StirnratenCategory.ownWords);
+    ordered.insert(0, StirnratenCategory.ownWords);
     return ordered.map((category) {
-      final title = StirnratenData.categoryNames[category] ?? category.name;
+      final title = category == StirnratenCategory.ownWords
+          ? 'Eigene & KI-Listen'
+          : (StirnratenData.categoryNames[category] ?? category.name);
       final wordCount = StirnratenData.getWords(category).length;
       final subtitle = category == StirnratenCategory.ownWords
           ? (_customWordLists.isEmpty
@@ -953,6 +1000,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                   timerText: _timerText,
                   timerBlink: _timerBlinkOn,
                   score: _snapshot.score,
+                  onExitTap: _showExitGameConfirmDialog,
                 ),
               ),
               Expanded(
@@ -2208,6 +2256,18 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
     });
   }
 
+  Future<void> _openWordsPreview(CustomWordList list) async {
+    final shouldEdit = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _CustomListWordsScreen(list: list),
+      ),
+    );
+    if (shouldEdit == true && mounted) {
+      await _openEditor(list: list);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final effects = EffectsConfig.of(context);
@@ -2295,11 +2355,179 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
                                   list: list,
                                   effects: effects,
                                   onPlay: () => _playList(list),
-                                  onEdit: () => _openEditor(list: list),
+                                  onViewWords: () => _openWordsPreview(list),
                                   onDelete: () => _confirmDelete(list),
                                 );
                               },
                             ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomListWordsScreen extends StatelessWidget {
+  final CustomWordList list;
+
+  const _CustomListWordsScreen({
+    required this.list,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final shadowBlur = EffectsConfig.of(context).shadowBlur(
+      high: 18,
+      medium: 12,
+      low: 6,
+    );
+    final editLabel =
+        list.source == WordListSource.ai ? 'Umbenennen' : 'Bearbeiten';
+    final editIcon = list.source == WordListSource.ai
+        ? Icons.drive_file_rename_outline_rounded
+        : Icons.edit_rounded;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          const _CategoryBackground(),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                  child: Row(
+                    children: [
+                      _HeaderIconButton(
+                        icon: Icons.arrow_back_rounded,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Wörter',
+                          style: GoogleFonts.fredoka(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: StirnratenColors.categoryText,
+                          ),
+                        ),
+                      ),
+                      _PrimaryPillButton(
+                        label: editLabel,
+                        icon: editIcon,
+                        onTap: () => Navigator.pop(context, true),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: StirnratenColors.categoryGlass,
+                      borderRadius: BorderRadius.circular(categoryCardRadius),
+                      border: Border.all(
+                        color: StirnratenColors.categoryBorder,
+                        width: 1.2,
+                      ),
+                      boxShadow: shadowBlur > 0
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: shadowBlur,
+                                offset: const Offset(0, 8),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          list.title,
+                          style: GoogleFonts.fredoka(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: StirnratenColors.categoryText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${list.wordCount} Wörter • ${list.language.toUpperCase()}',
+                          style: GoogleFonts.nunito(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: StirnratenColors.categoryMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: list.words.isEmpty
+                      ? const _EmptyState()
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                          itemCount: list.words.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final word = list.words[index];
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: StirnratenColors.categoryPrimary
+                                          .withValues(alpha: 0.25),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: StirnratenColors.categoryText,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      word,
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: StirnratenColors.categoryText,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
@@ -2380,7 +2608,9 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
     if (tokenCount > maxAllowed) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).'),
+          content: Text(
+            'Maximal $maxAllowed Wörter pro Liste (aktuell: $tokenCount).',
+          ),
         ),
       );
       await showPremiumPaywall(
@@ -2577,23 +2807,16 @@ class _CustomListCard extends StatelessWidget {
   final CustomWordList list;
   final EffectsConfig effects;
   final VoidCallback onPlay;
-  final VoidCallback onEdit;
+  final VoidCallback onViewWords;
   final VoidCallback onDelete;
 
   const _CustomListCard({
     required this.list,
     required this.effects,
     required this.onPlay,
-    required this.onEdit,
+    required this.onViewWords,
     required this.onDelete,
   });
-
-  String _formatDate(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final year = date.year.toString();
-    return '$day.$month.$year';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -2620,33 +2843,51 @@ class _CustomListCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              list.title,
-              style: GoogleFonts.fredoka(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: StirnratenColors.categoryText,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    list.title,
+                    style: GoogleFonts.fredoka(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: StirnratenColors.categoryText,
+                    ),
+                  ),
+                ),
+                if (list.source == WordListSource.ai)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: StirnratenColors.categoryPrimary
+                          .withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: StirnratenColors.categoryPrimary
+                            .withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      'KI',
+                      style: GoogleFonts.nunito(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: StirnratenColors.categoryText
+                            .withValues(alpha: 0.85),
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
-              '${list.wordCount} Wörter • ${list.language.toUpperCase()} • '
-              '${list.source == WordListSource.ai ? 'KI' : 'Manuell'}',
+              '${list.wordCount} Wörter • ${list.language.toUpperCase()}',
               style: GoogleFonts.nunito(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: StirnratenColors.categoryMuted,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              list.lastPlayedAt == null
-                  ? 'Noch nie gespielt'
-                  : 'Zuletzt gespielt: ${_formatDate(list.lastPlayedAt!)}',
-              style: GoogleFonts.nunito(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: StirnratenColors.categoryMuted.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 12),
@@ -2660,11 +2901,14 @@ class _CustomListCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _IconPillButton(
-                  icon: list.source == WordListSource.ai
-                      ? Icons.drive_file_rename_outline_rounded
-                      : Icons.edit_rounded,
-                  onTap: onEdit,
+                Expanded(
+                  child: _SecondaryPillButton(
+                    label: 'Wörter',
+                    icon: list.source == WordListSource.ai
+                        ? Icons.drive_file_rename_outline_rounded
+                        : Icons.edit_rounded,
+                    onTap: onViewWords,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 _IconPillButton(
@@ -2881,6 +3125,110 @@ class _DeleteConfirmDialog extends StatelessWidget {
   }
 }
 
+class _ExitGameConfirmDialog extends StatelessWidget {
+  const _ExitGameConfirmDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = EffectsConfig.of(context);
+    final blurSigma =
+        effects.allowBlur ? effects.blur(high: 8, medium: 5, low: 0) : 0.0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: GlassBackdrop(
+        blurSigma: blurSigma,
+        enableBlur: effects.allowBlur,
+        borderRadius: BorderRadius.circular(26),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: StirnratenColors.categoryGlass,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: StirnratenColors.categoryBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 26,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.meeting_room_rounded,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Spiel wirklich beenden?',
+                      style: GoogleFonts.fredoka(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: StirnratenColors.categoryText,
+                      ),
+                    ),
+                  ),
+                  _HeaderIconButton(
+                    icon: Icons.close_rounded,
+                    onTap: () => Navigator.pop(context, false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Dein aktueller Fortschritt geht verloren.',
+                style: GoogleFonts.nunito(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SecondaryPillButton(
+                      label: 'Abbrechen',
+                      onTap: () => Navigator.pop(context, false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DangerPillButton(
+                      label: 'Beenden',
+                      icon: Icons.meeting_room_rounded,
+                      onTap: () => Navigator.pop(context, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PrimaryPillButton extends StatelessWidget {
   final String label;
   final IconData? icon;
@@ -2994,10 +3342,12 @@ class _DangerPillButton extends StatelessWidget {
 
 class _SecondaryPillButton extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final VoidCallback onTap;
 
   const _SecondaryPillButton({
     required this.label,
+    this.icon,
     required this.onTap,
   });
 
@@ -3013,13 +3363,22 @@ class _SecondaryPillButton extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
         ),
         child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.nunito(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: StirnratenColors.categoryText,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: StirnratenColors.categoryText, size: 18),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.nunito(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: StirnratenColors.categoryText,
+                ),
+              ),
+            ],
           ),
         ),
       ),

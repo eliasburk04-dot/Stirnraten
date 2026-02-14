@@ -48,6 +48,8 @@ class _PremiumSheet extends StatelessWidget {
           children: [
             Row(
               children: [
+                const _PremiumAppIcon(size: 40),
+                const SizedBox(width: 10),
                 Text(
                   'Premium',
                   style: GoogleFonts.fredoka(
@@ -205,6 +207,50 @@ class _FeatureRow extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumAppIcon extends StatelessWidget {
+  final double size;
+
+  const _PremiumAppIcon({
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: Image.asset(
+          'assets/images/App_Icon.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            return Container(
+              color: Colors.white.withValues(alpha: 0.12),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: Colors.white,
+              ),
+            );
+          },
         ),
       ),
     );

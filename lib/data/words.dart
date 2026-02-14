@@ -70,7 +70,7 @@ class StirnratenData {
     StirnratenCategory.cities: 'Städte',
     StirnratenCategory.festivals: 'Feste',
     StirnratenCategory.feelings: 'Gefühle',
-    StirnratenCategory.ownWords: 'Eigene Wörter',
+    StirnratenCategory.ownWords: 'Eigene & KI-Listen',
   };
 
   static const Map<StirnratenCategory, IconData> categoryIcons = {

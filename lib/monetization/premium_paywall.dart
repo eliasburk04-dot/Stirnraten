@@ -77,22 +77,7 @@ class _PaywallContent extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: StirnratenColors.categoryPrimary.withValues(alpha: 0.18),
-                border: Border.all(
-                  color:
-                      StirnratenColors.categoryPrimary.withValues(alpha: 0.25),
-                ),
-              ),
-              child: const Icon(
-                Icons.workspace_premium_rounded,
-                color: StirnratenColors.categoryText,
-              ),
-            ),
+            const _PremiumAppIcon(size: 44),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -253,6 +238,52 @@ class _Bullet extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PremiumAppIcon extends StatelessWidget {
+  final double size;
+
+  const _PremiumAppIcon({
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: StirnratenColors.categoryBorder,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: Image.asset(
+          'assets/images/App_Icon.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            return Container(
+              color: StirnratenColors.categoryPrimary.withValues(alpha: 0.18),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: StirnratenColors.categoryText,
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

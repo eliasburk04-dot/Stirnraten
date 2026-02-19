@@ -1759,10 +1759,10 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => 128;
+  double get minExtent => 132;
 
   @override
-  double get maxExtent => 128;
+  double get maxExtent => 132;
 
   @override
   Widget build(
@@ -1896,6 +1896,8 @@ class _SearchField extends StatelessWidget {
               controller: controller,
               focusNode: focusNode,
               onChanged: onChanged,
+              maxLines: 1,
+              textAlignVertical: TextAlignVertical.center,
               style: GoogleFonts.nunito(
                 color: StirnratenColors.categoryText,
                 fontSize: 13,
@@ -1910,6 +1912,7 @@ class _SearchField extends StatelessWidget {
                 ),
                 border: InputBorder.none,
                 isDense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ),

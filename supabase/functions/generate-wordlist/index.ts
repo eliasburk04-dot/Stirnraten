@@ -1,5 +1,5 @@
 // Supabase Edge Function: generate-wordlist
-// Calls Groq Chat Completions and returns strict JSON:
+// Calls Groq Chat Completions and returns strict JSON to the app:
 // {"title":"...","language":"de|en","items":["..."]}
 //
 // Security:
@@ -84,18 +84,59 @@ function berlinDateKey(now: Date = new Date()): string {
   return `${y}-${m}-${d}`.trim();
 }
 
+const blockedMetaTerms = new Set<string>([
+  "thing",
+  "things",
+  "object",
+  "objects",
+  "element",
+  "elements",
+  "category",
+  "categories",
+  "stuff",
+  "freedom",
+  "system",
+  "process",
+  "concept",
+  "development",
+  "ding",
+  "dinge",
+  "objekt",
+  "objekte",
+  "element",
+  "elemente",
+  "kategorie",
+  "kategorien",
+  "sache",
+  "sachen",
+  "freiheit",
+  "prozess",
+  "konzept",
+  "entwicklung",
+]);
+
+function extractWordFromModelItem(entry: unknown): string | null {
+  if (typeof entry === "string") return entry;
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const raw = (entry as Record<string, unknown>).word;
+  if (typeof raw !== "string") return null;
+  return raw;
+}
+
 function normalizeItems(items: unknown, requestedCount: number): string[] {
   if (!Array.isArray(items)) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const entry of items) {
-    if (typeof entry !== "string") continue;
-    let s = entry.trim();
+    const candidate = extractWordFromModelItem(entry);
+    if (!candidate) continue;
+    let s = candidate.trim();
     if (!s) continue;
 
     // Strip obvious bullet/number prefixes.
     s = s.replace(/^\s*[-*•]\s+/, "");
     s = s.replace(/^\s*\d+[\).\-\:]\s+/, "");
+    s = s.replace(/\s+/g, " ");
     s = s.trim();
     if (!s) continue;
 
@@ -104,14 +145,15 @@ function normalizeItems(items: unknown, requestedCount: number): string[] {
     s = s.replace(/\p{Extended_Pictographic}/gu, "").trim();
     if (!s) continue;
 
-    // Exactly 1 word so requested count maps to visible list size consistently.
+    // Prefer one word, allow up to 2 for common compound terms.
     const words = s.split(/\s+/).filter(Boolean);
-    if (words.length !== 1) continue;
+    if (words.length < 1 || words.length > 2) continue;
 
     // No super long terms.
     if (s.length > 64) continue;
 
     const key = s.toLocaleLowerCase();
+    if (blockedMetaTerms.has(key)) continue;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(s);
@@ -202,33 +244,85 @@ function extractAIResponsePayload(raw: unknown): Record<string, unknown> | null 
   return null;
 }
 
-function buildSystemPrompt(req: ClientRequest): string {
-  // Prefer client-provided instructions (keeps parity with app prompt),
-  // but force strict JSON and safety rules regardless.
-  const base = (req.instructions ?? "").trim();
-  const forced = `
-Return STRICT JSON only in this schema:
-{"title":"...","language":"de|en","items":["term1","term2"]}
-Rules:
-- Items: exactly 1 word (no spaces), no sentences
-- No duplicates (case-insensitive)
-- No emojis
-- No numbering/bullets
-- Avoid NSFW, hate, insults
-`;
-  if (base) return `${base}\n${forced}`.trim();
-  return forced.trim();
+function buildSystemPrompt(): string {
+  return `
+You are generating premium word lists for a fast-paced guessing game (like Head's Up / charades).
+Your output will be parsed by a strict program. You MUST follow formatting rules exactly.
+
+PRIMARY GOAL:
+Deliver EXACTLY Count playable, high-quality guessing words that feel worth paying for.
+
+NON-NEGOTIABLE RULES (QUALITY):
+1) Word type
+- Prefer concrete nouns (visual, tangible, actable).
+- NO abstract concepts.
+- NO meta-words (thing, object, element, category, stuff).
+- NO overly technical jargon unless difficulty="hard" and still widely known.
+
+2) Playability
+Each word MUST be:
+- Easy to describe without saying the word.
+- Pantomime-friendly / guessable in a group.
+- Commonly known in the requested language.
+- Not niche/academic/insider.
+
+3) Diversity
+- Avoid synonym clusters and near-duplicates.
+- Avoid repetitive micro-categories.
+- If topic is broad: diversify internally into subthemes.
+- If topic is narrow: maximize variation inside the topic.
+
+4) Difficulty calibration
+- easy: very common, highly visual, everyday vocabulary.
+- medium: common, slightly more specific or creative, still widely known.
+- hard: specific but still culturally known and playable. NO obscure dictionary words.
+
+NON-NEGOTIABLE RULES (FORMAT):
+- Prefer single-word terms.
+- Maximum 2 words only if extremely common and natural.
+- NO emojis.
+- NO numbering.
+- NO bullet points.
+- NO explanations.
+- NO duplicates (case-insensitive).
+- Max 64 characters per word.
+- Language must match exactly.
+
+MANDATORY SELF-CHECK:
+- First, generate a candidate pool of at least Count + 20 words.
+- Then filter strictly by all rules above.
+- Remove weak / abstract / unplayable / too-similar / repetitive items.
+- Ensure variety across subthemes.
+- If after filtering you have less than Count items, generate additional candidates and repeat until you have EXACTLY Count.
+
+OUTPUT:
+Return only valid JSON with exactly:
+{
+  "title": "string",
+  "language": "de or en",
+  "items": [
+    { "word": "string" }
+  ]
+}
+- No markdown, no comments, no extra keys.
+`.trim();
 }
 
 function buildUserPrompt(input: ClientRequest["input"]): string {
   const tags = (input.styleTags ?? []).filter((t) => (t ?? "").trim().length > 0);
+  const requestedTitle = typeof input.title === "string" ? input.title.trim() : "";
   return [
-    `topic: ${input.topic}`,
-    `language: ${input.language}`,
-    `difficulty: ${input.difficulty}`,
-    `target_count: ${input.count}`,
-    `style_tags: ${tags.length ? tags.join(", ") : "none"}`,
-    `include_hints: ${input.includeHints ? "true" : "false"}`,
+    `INPUT`,
+    `Topic: ${input.topic}`,
+    `Language: ${input.language}`,
+    `Difficulty: ${input.difficulty}`,
+    `Count: ${input.count}`,
+    `Optional title: ${requestedTitle || "(empty)"}`,
+    `Style tags: ${tags.length ? tags.join(", ") : "none"}`,
+    `Include hints: ${input.includeHints ? "true" : "false"}`,
+    `TITLE RULES`,
+    `- If Optional title is non-empty, use it exactly (trim whitespace).`,
+    `- Otherwise create a short, appealing title based on Topic + Difficulty in the requested language.`,
   ].join("\n");
 }
 
@@ -258,6 +352,27 @@ function computeAskCount(args: {
   }
   const followUp = remaining + 12;
   return clamp(followUp, 5, args.maxItems);
+}
+
+function defaultGeneratedTitle(args: {
+  topic: string;
+  language: Language;
+  difficulty: Difficulty;
+}): string {
+  if (args.language === "de") {
+    const label = args.difficulty === "easy"
+      ? "Leicht"
+      : args.difficulty === "medium"
+      ? "Mittel"
+      : "Schwer";
+    return `${args.topic} (${label})`;
+  }
+  const label = args.difficulty === "easy"
+    ? "Easy"
+    : args.difficulty === "medium"
+    ? "Medium"
+    : "Hard";
+  return `${args.topic} (${label})`;
 }
 
 async function callGroqWithRateLimitRetry(args: {
@@ -383,6 +498,7 @@ Deno.serve(async (req: Request) => {
   const language = String((input as any).language ?? "").trim() as Language;
   const difficulty = String((input as any).difficulty ?? "").trim() as Difficulty;
   const count = Number((input as any).count ?? 0);
+  const requestedTitle = String((input as any).title ?? "").trim();
   if (topic.length < 2) return json(400, { error: "topic_too_short" });
   if (language !== "de" && language !== "en") return json(400, { error: "invalid_language" });
   if (difficulty !== "easy" && difficulty !== "medium" && difficulty !== "hard") {
@@ -430,12 +546,12 @@ Deno.serve(async (req: Request) => {
   const model = (Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
   const temperature = Number(Deno.env.get("GROQ_TEMPERATURE") ?? "0.4");
 
-  const system = buildSystemPrompt(body);
+  const system = buildSystemPrompt();
 
   // Ensure we return exactly the requested count (within maxItems) whenever possible.
   // We may call Groq multiple times within the *same* quota-consumed invocation to fill gaps.
   const targetCount = requestedCount;
-  const rawPool: string[] = [];
+  const rawPool: unknown[] = [];
   let normalized: string[] = [];
   let title: string | null = null;
 
@@ -454,6 +570,7 @@ Deno.serve(async (req: Request) => {
         language,
         difficulty,
         count: askCount,
+        title: requestedTitle || undefined,
       } as any,
       excludeTerms: normalized,
     });
@@ -493,10 +610,11 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!title) {
-      title = String(payload.title ?? "").trim() || `${topic} (${difficulty})`;
+      title = String(payload.title ?? "").trim() ||
+        defaultGeneratedTitle({ topic, language, difficulty });
     }
 
-    rawPool.push(...(Array.isArray(payload.items) ? payload.items.map(String) : []));
+    rawPool.push(...(Array.isArray(payload.items) ? payload.items : []));
     normalized = normalizeItems(rawPool, targetCount);
 
     if (normalized.length >= targetCount) {
@@ -504,7 +622,8 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const finalTitle = title ?? `${topic} (${difficulty})`;
+  const finalTitle = requestedTitle || title ||
+    defaultGeneratedTitle({ topic, language, difficulty });
   if (normalized.length < 5) {
     return json(502, {
       error: "too_few_items",

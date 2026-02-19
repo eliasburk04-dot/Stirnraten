@@ -118,6 +118,8 @@ class MonetizationController extends ChangeNotifier {
       String.fromEnvironment('ANDROID_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
   static const String _fallbackIosProductId =
       'com.stirnraten.app.premium_lifetime';
+  static const bool _forcePremiumInDebug =
+      bool.fromEnvironment('FORCE_PREMIUM_DEBUG', defaultValue: false);
 
   final MonetizationPrefs _prefs;
   final MonetizationIapClient _iapClient;
@@ -162,6 +164,7 @@ class MonetizationController extends ChangeNotifier {
   bool get iapConfigured => _iapConfigured;
   String? get iapStatusMessage => _iapStatusMessage;
   bool get canAttemptPurchase => currentLifetimeProductId != null;
+  bool get _isPremiumForcedForDebug => kDebugMode && _forcePremiumInDebug;
 
   String? get currentLifetimeProductId {
     final ios = _envIosProductId.trim();
@@ -190,6 +193,9 @@ class MonetizationController extends ChangeNotifier {
     final todayKey = BerlinDate.dateKey();
     final snapshot = await _prefs.load(defaultDateKey: todayKey);
     _isPremium = snapshot.isPremium;
+    if (_isPremiumForcedForDebug) {
+      _isPremium = true;
+    }
     _dailyAiGenerationsUsed = snapshot.dailyAiUsed;
     _dailyAiGenerationsDateKey = snapshot.dailyAiDateKey;
     _resetDailyQuotaIfNeeded();
@@ -197,6 +203,9 @@ class MonetizationController extends ChangeNotifier {
     await _configureIapIfPossible();
 
     _initialized = true;
+    if (_isPremiumForcedForDebug) {
+      await _prefs.savePremium(true);
+    }
     notifyListeners();
   }
 
@@ -236,9 +245,18 @@ class MonetizationController extends ChangeNotifier {
   }
 
   Future<void> applyServerAiUsage(AiUsageSnapshot snapshot) async {
-    if (snapshot.isPremium != null && snapshot.isPremium != _isPremium) {
-      _isPremium = snapshot.isPremium!;
-      await _prefs.savePremium(_isPremium);
+    if (_isPremiumForcedForDebug) {
+      _isPremium = true;
+      await _prefs.savePremium(true);
+    } else if (snapshot.isPremium != null && snapshot.isPremium != _isPremium) {
+      final serverPremium = snapshot.isPremium!;
+      // Keep existing premium entitlement locally; backend may lag temporarily.
+      if (_isPremium && !serverPremium) {
+        await _prefs.savePremium(true);
+      } else {
+        _isPremium = serverPremium;
+        await _prefs.savePremium(_isPremium);
+      }
     }
     _dailyAiGenerationsDateKey = snapshot.dateKey;
     _dailyAiGenerationsUsed = snapshot.used;
@@ -250,6 +268,7 @@ class MonetizationController extends ChangeNotifier {
   }
 
   Future<void> setPremium(bool value) async {
+    if (_isPremiumForcedForDebug && !value) return;
     if (_isPremium == value) return;
     _isPremium = value;
     await _prefs.savePremium(value);

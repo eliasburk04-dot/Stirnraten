@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stirnraten/monetization/ai_usage_snapshot.dart';
+import 'package:stirnraten/monetization/berlin_date.dart';
 import 'package:stirnraten/monetization/monetization_controller.dart';
 
 void main() {
@@ -51,12 +52,12 @@ void main() {
     );
     await reloaded.init();
     expect(reloaded.isPremium, isTrue);
-    expect(reloaded.dailyAiGenerationsDateKey, '2026-02-11');
-    expect(reloaded.dailyAiGenerationsUsed, 1);
+    expect(reloaded.dailyAiGenerationsDateKey, BerlinDate.dateKey());
+    expect(reloaded.dailyAiGenerationsUsed, 0);
   });
 
   test(
-      'applyServerAiUsage downgrades stale local premium when server says free',
+      'applyServerAiUsage keeps local premium when server says free',
       () async {
     final controller = MonetizationController(
       iapClient: _FakeIapClient(),
@@ -76,7 +77,7 @@ void main() {
       ),
     );
 
-    expect(controller.isPremium, isFalse);
+    expect(controller.isPremium, isTrue);
   });
 
   test(

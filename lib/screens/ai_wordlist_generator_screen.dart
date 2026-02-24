@@ -794,7 +794,7 @@ class _SegmentButton extends StatelessWidget {
           style: GoogleFonts.nunito(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: StirnratenColors.categoryText,
+            color: selected ? const Color(0xFF1E293B) : StirnratenColors.categoryMuted,
           ),
         ),
       ),

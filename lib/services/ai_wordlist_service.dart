@@ -286,131 +286,121 @@ class SupabaseAIWordlistService implements AIWordlistService {
       },
     };
 
-    Future<FunctionResponse> invokeOnce() {
-      return _client.functions.invoke(
-        'generate-wordlist',
-        body: payload,
-      );
+    Future<http.Response> invokeOnce() async {
+      try {
+        final res = await _client.functions.invoke(
+          'generate-wordlist',
+          body: payload,
+        );
+
+        // Convert Supabase FunctionResponse to http.Response for unified handling.
+        return http.Response(
+          res.data is String ? res.data as String : jsonEncode(res.data),
+          res.status,
+        );
+      } on FunctionException catch (e) {
+        // The Supabase SDK throws FunctionException for non-2xx responses.
+        // Convert it to an http.Response so downstream status-code handling works.
+        final status = e.status;
+        final body = e.details is String
+            ? e.details as String
+            : jsonEncode(e.details ?? {'error': e.reasonPhrase ?? 'unknown'});
+        return http.Response(body, status);
+      }
     }
 
     String messageForFunctionError({
       required int status,
       required dynamic details,
     }) {
-      String? code;
-      String? detail;
-      if (details is Map) {
-        code = details['error']?.toString().trim();
-        detail = details['detail']?.toString().trim();
-        if (detail != null && detail.length > 220) {
-          detail = '${detail.substring(0, 220)}...';
-        }
+      // User-friendly messages only — no HTTP codes, config names, or internals.
+      if (status == 401) {
+        return 'Anmeldung fehlgeschlagen. Bitte App neu starten.';
       }
-
-      // Map known server error codes to actionable German messages.
-      if (status == 500 && code == 'quota_check_failed') {
-        return 'KI-Service Fehler (HTTP 500: quota_check_failed). '
-            'Meist fehlt die DB-Funktion consume_ai_generation auf Supabase (Migration nicht gepusht) '
-            'oder sie wirft einen Fehler. ${detail == null ? '' : 'Detail: $detail'}';
+      if (status == 402) {
+        return 'Tageslimit erreicht. Mit Premium unbegrenzt generieren.';
       }
-      if (status == 500 && code == 'auth_verify_failed') {
-        return 'KI-Service Fehler (HTTP 500: auth_verify_failed). '
-            'Server konnte den Supabase JWT nicht verifizieren. ${detail == null ? '' : 'Detail: $detail'}';
+      if (status == 429) {
+        return 'Zu viele Anfragen. Bitte kurz warten.';
       }
-      if (status == 500 && code == 'supabase_env_missing') {
-        return 'KI-Service Fehler (HTTP 500: supabase_env_missing). '
-            'In der Edge Function fehlen SUPABASE_URL/SUPABASE_ANON_KEY Secrets.';
+      if (status == 500) {
+        return 'Der KI-Service ist vorübergehend nicht erreichbar. Bitte später erneut versuchen.';
       }
-      if (status == 500 && code == 'groq_api_key_missing') {
-        return 'KI-Service Fehler (HTTP 500: groq_api_key_missing). '
-            'In Supabase Secrets fehlt GROQ_API_KEY.';
+      if (status == 502) {
+        return 'Der KI-Service antwortet gerade nicht. Bitte später erneut versuchen.';
       }
-      if (status == 502 && code == 'upstream_error') {
-        return 'KI-Service Fehler (HTTP 502: upstream_error). '
-            '${detail == null ? 'Groq/Upstream antwortet mit Fehler.' : 'Detail: $detail'}';
-      }
-
-      return 'KI-Service Fehler (HTTP $status${code == null || code.isEmpty ? '' : ': $code'}).'
-          '${detail == null || detail.isEmpty ? '' : ' Detail: $detail'}';
+      return 'Etwas ist schiefgelaufen. Bitte erneut versuchen.';
     }
 
-    AiUsageSnapshot? usageFromDetails(dynamic details) {
-      if (details is Map) {
-        return HttpAIWordlistService._tryParseUsageFromMap(details);
-      }
-      return null;
-    }
-
-    FunctionResponse res;
+    http.Response res;
     try {
       res = await invokeOnce();
-    } on FunctionException catch (e) {
-      if (e.status == 401) {
-        // Likely persisted token from another project; clear local session and retry once.
-        try {
-          await _client.auth.signOut(scope: SignOutScope.local);
-        } catch (_) {
-          // ignore
-        }
-        final ok = await _auth.ensureAnonymousSession(
-          timeout: const Duration(seconds: 25),
+    } catch (e) {
+      throw const AIWordlistException(
+        'Verbindung zum KI-Service fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.',
+      );
+    }
+
+    if (res.statusCode == 401) {
+      // Likely persisted token from another project; clear local session and retry once.
+      try {
+        await _client.auth.signOut(scope: SignOutScope.local);
+      } catch (_) {
+        // ignore
+      }
+      final ok = await _auth.ensureAnonymousSession(
+        timeout: const Duration(seconds: 25),
+      );
+      if (!ok) {
+        throw const AIWordlistException(
+          'Supabase Login Timeout. Bitte erneut versuchen.',
         );
-        if (!ok) {
-          throw const AIWordlistException(
-            'Supabase Login Timeout. Bitte erneut versuchen.',
-          );
-        }
-        try {
-          res = await invokeOnce();
-        } on FunctionException catch (e2) {
-          if (e2.status == 401) {
-            final detail = e2.details is Map
-                ? ((e2.details as Map)['error'] ??
-                        (e2.details as Map)['message'])
-                    ?.toString()
-                : null;
-            throw AIWordlistException(
-              'KI-Service nicht autorisiert (HTTP 401${detail == null ? '' : ': $detail'}). '
-              'Prüfe: Supabase Anonymous Auth ist aktiv und SUPABASE_URL/SUPABASE_ANON_KEY sind korrekt.',
-            );
-          }
-          if (e2.status == 402) {
-            throw AIQuotaExceededException(
-              'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
-              usage: usageFromDetails(e2.details),
-            );
-          }
-          if (e2.status == 429) {
-            throw const AIRateLimitException(
-              'Zu viele KI-Anfragen. Bitte kurz warten.',
-              Duration(seconds: 20),
-            );
-          }
-          throw AIWordlistServerException(
-            messageForFunctionError(status: e2.status, details: e2.details),
-            usage: usageFromDetails(e2.details),
-          );
-        }
-      } else if (e.status == 402) {
-        throw AIQuotaExceededException(
-          'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
-          usage: usageFromDetails(e.details),
+      }
+      try {
+        res = await invokeOnce();
+      } catch (e2) {
+        throw const AIWordlistException(
+          'Verbindung zum KI-Service fehlgeschlagen. Bitte erneut versuchen.',
         );
-      } else if (e.status == 429) {
-        throw const AIRateLimitException(
-          'Zu viele KI-Anfragen. Bitte kurz warten.',
-          Duration(seconds: 20),
-        );
-      } else {
-        throw AIWordlistServerException(
-          messageForFunctionError(status: e.status, details: e.details),
-          usage: usageFromDetails(e.details),
+      }
+
+      if (res.statusCode == 401) {
+        throw const AIWordlistException(
+          'Anmeldung fehlgeschlagen. Bitte App neu starten und erneut versuchen.',
         );
       }
     }
 
-    final data = res.data;
-    if (data is! Map) throw const AIWordlistException('Ungültige KI-Antwort.');
+    if (res.statusCode == 402) {
+      throw AIQuotaExceededException(
+        'Heute sind 3 KI-Generierungen frei. Premium = unbegrenzt.',
+        usage: HttpAIWordlistService._tryParseUsageFromBody(res.body),
+      );
+    }
+    if (res.statusCode == 429) {
+      throw const AIRateLimitException(
+        'Zu viele KI-Anfragen. Bitte kurz warten.',
+        Duration(seconds: 20),
+      );
+    }
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final detail = HttpAIWordlistService._extractErrorDetail(res.body);
+      throw AIWordlistServerException(
+        messageForFunctionError(status: res.statusCode, details: detail),
+        usage: HttpAIWordlistService._tryParseUsageFromBody(res.body),
+      );
+    }
+
+    dynamic data;
+    try {
+      data = jsonDecode(res.body);
+    } catch (_) {
+      throw const AIWordlistException('Ungültige KI-Antwort (JSON erwartet).');
+    }
+
+    if (data is! Map) {
+      throw const AIWordlistException('Ungültige KI-Antwort (Map erwartet).');
+    }
 
     final usage = HttpAIWordlistService._tryParseUsageFromMap(data);
     final raw = AIWordlistResponse.fromJson(data.cast<String, dynamic>());
@@ -537,7 +527,9 @@ class HttpAIWordlistService implements AIWordlistService {
           'KI-Anfrage Timeout. Bitte erneut versuchen.',
         );
       } catch (error) {
-        throw AIWordlistException('Netzwerkfehler bei KI-Anfrage: $error');
+        throw const AIWordlistException(
+          'Verbindung zum KI-Service fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.',
+        );
       }
 
       if (response.statusCode == 429) {
@@ -553,18 +545,13 @@ class HttpAIWordlistService implements AIWordlistService {
         );
       }
       if (response.statusCode == 401) {
-        final detail = _extractErrorDetail(response.body);
-        throw AIWordlistException(
-          'KI-Service nicht autorisiert (HTTP 401${detail.isEmpty ? '' : ': $detail'}). '
-          'Prüfe: Supabase Anonymous Auth ist aktiv, '
-          'AI_WORDLIST_ENDPOINT zeigt auf die Supabase Edge Function '
-          'und SUPABASE_ANON_KEY ist gesetzt.',
+        throw const AIWordlistException(
+          'Anmeldung fehlgeschlagen. Bitte App neu starten und erneut versuchen.',
         );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final detail = _extractErrorDetail(response.body);
         throw AIWordlistServerException(
-          'KI-Service Fehler (HTTP ${response.statusCode}${detail.isEmpty ? '' : ': $detail'}).',
+          'Etwas ist schiefgelaufen. Bitte erneut versuchen.',
           usage: _tryParseUsageFromBody(response.body),
         );
       }

@@ -20,10 +20,15 @@ class GlassBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = !enableBlur || blurSigma <= 0
+    var finalSigma = blurSigma;
+    if (MediaQuery.sizeOf(context).width > 800) {
+      finalSigma = (blurSigma * 0.4).clamp(0.0, 4.0);
+    }
+    
+    final content = !enableBlur || finalSigma <= 0
         ? child
         : BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            filter: ImageFilter.blur(sigmaX: finalSigma, sigmaY: finalSigma),
             child: child,
           );
     return ClipRRect(
@@ -190,8 +195,10 @@ class _GlassButtonState extends State<GlassButton> {
     final shadowBlur = effects.shadowBlur(high: 12, medium: 8, low: 0);
     final shadowAlpha = effects.shadowAlpha(high: 0.3, medium: 0.18, low: 0);
 
-    return GestureDetector(
-      onTapDown: isEnabled ? (_) => setState(() => _isPressed = true) : null,
+    return MouseRegion(
+      cursor: isEnabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTapDown: isEnabled ? (_) => setState(() => _isPressed = true) : null,
       onTapUp: isEnabled
           ? (_) {
               setState(() => _isPressed = false);
@@ -263,6 +270,7 @@ class _GlassButtonState extends State<GlassButton> {
           ),
         ),
       ),
+    ),
     );
   }
 }

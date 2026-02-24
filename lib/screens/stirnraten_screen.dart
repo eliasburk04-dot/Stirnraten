@@ -51,6 +51,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   final StirnratenEngine _engine = StirnratenEngine();
   final Set<StirnratenCategory> _selectedCategories = <StirnratenCategory>{};
   bool _showSettingsPanel = false;
+  int _sidebarIndex = 0;
   bool _resultsExpanded = false;
   Timer? _gameTimer;
   Timer? _countdownTimer;
@@ -59,6 +60,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   late final ValueNotifier<String> _wordText;
   late final ValueNotifier<bool> _timerBlinkOn;
   bool _endCountdownStarted = false;
+  bool _isPaused = false;
 
   // Sensor handling
   final _tiltController = TiltController(
@@ -598,6 +600,20 @@ class _StirnratenScreenState extends State<StirnratenScreen>
     });
   }
 
+  void _togglePause() {
+    if (_snapshot.state != StirnratenGameState.playing) return;
+    setState(() {
+      if (_isPaused) {
+        _isPaused = false;
+        _startTimer();
+      } else {
+        _isPaused = true;
+        _gameTimer?.cancel();
+        _tiltController.stop();
+      }
+    });
+  }
+
   void _endGame() {
     _gameTimer?.cancel();
     _accelerometerSubscription?.cancel();
@@ -659,6 +675,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       _feedbackMessage = null;
       _showFallbackButtons = false;
       _endCountdownStarted = false;
+      _isPaused = false;
       _selectedCategories.clear();
       _engine.resetToSetup();
     });
@@ -739,12 +756,167 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Widget _buildSetup() {
+    final isLargeScreen = MediaQuery.sizeOf(context).width > 800;
+    if (isLargeScreen) {
+      return _buildLargeSetup();
+    }
+    return _buildSmallSetup();
+  }
+
+  Widget _buildLargeSetup() {
+    return Row(
+      children: [
+        Container(
+          width: 260,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'STIRNRATEN',
+                      style: GoogleFonts.fredoka(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      children: [
+                        _SidebarItem(
+                          icon: Icons.grid_view_rounded,
+                          label: 'Kategorien',
+                          isSelected: _sidebarIndex == 0,
+                          onTap: () => setState(() => _sidebarIndex = 0),
+                        ),
+                        const SizedBox(height: 8),
+                        _SidebarItem(
+                          icon: Icons.edit_note_rounded,
+                          label: 'Eigene Wörter',
+                          isSelected: _sidebarIndex == 1,
+                          onTap: () => setState(() => _sidebarIndex = 1),
+                        ),
+                        const SizedBox(height: 8),
+                        _SidebarItem(
+                          icon: Icons.settings_rounded,
+                          label: 'Einstellungen',
+                          isSelected: _sidebarIndex == 2,
+                          onTap: () => setState(() => _sidebarIndex = 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _SidebarItem(
+                    icon: Icons.arrow_back_rounded,
+                    label: 'Hauptmenü',
+                    isSelected: false,
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _buildDetailContent(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailContent() {
+    if (_sidebarIndex == 1) {
+      return CustomWordsScreen(
+        key: const ValueKey('CustomWords'),
+        storage: _customWordStorage,
+        showBackButton: false,
+        onPlay: (list) {
+          final words = list.words;
+          if (words.isNotEmpty) {
+            _selectedCategories.clear();
+            _selectedCategories.add(StirnratenCategory.ownWords);
+            _startCountdownWithWords(words);
+          }
+        },
+      );
+    } else if (_sidebarIndex == 2) {
+      return Scaffold(
+        key: const ValueKey('Settings'),
+        body: Stack(
+          children: [
+            const _CategoryBackground(),
+            Center(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Einstellungen',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      SettingsPanel(
+                        selectedTime: _snapshot.selectedTime,
+                        selectedMode: _snapshot.selectedMode,
+                        onTimeChanged: (value) {
+                          setState(() => _engine.setSelectedTime(value));
+                          _settingsStorage.saveSelectedTime(value);
+                        },
+                        onModeChanged: (mode) {
+                          setState(() => _engine.setSelectedMode(mode));
+                          _settingsStorage.saveSelectedMode(mode);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _buildSmallSetup(key: const ValueKey('Categories'), hideControls: true);
+  }
+
+  Widget _buildSmallSetup({Key? key, bool hideControls = false}) {
     final filteredCategories = _filteredCategories;
     final selectedCount = _selectedCategories.length;
     const bottomBarHeight = 112.0;
     final topInset = MediaQuery.of(context).padding.top;
 
     return DefaultTextStyle(
+      key: key,
       style: GoogleFonts.nunito(
         color: StirnratenColors.categoryText,
         fontWeight: FontWeight.w600,
@@ -752,10 +924,13 @@ class _StirnratenScreenState extends State<StirnratenScreen>
       child: Stack(
         children: [
           const _CategoryBackground(),
-          SafeArea(
-            child: ScrollConfiguration(
-              behavior: const _NoScrollbarBehavior(),
-              child: CustomScrollView(
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SafeArea(
+                child: ScrollConfiguration(
+                  behavior: const _NoScrollbarBehavior(),
+                  child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
                   SliverPersistentHeader(
@@ -764,8 +939,8 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                       controller: _searchController,
                       focusNode: _searchFocusNode,
                       isFocused: _searchFocusNode.hasFocus,
-                      onBack: () => Navigator.pop(context),
-                      onSettings: _toggleSettingsPanel,
+                      onBack: hideControls ? null : () => Navigator.pop(context),
+                      onSettings: hideControls ? null : _toggleSettingsPanel,
                       onQueryChanged: (value) {
                         setState(() {
                           _searchQuery = value;
@@ -781,7 +956,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                       bottomBarHeight,
                     ),
                     sliver: SliverMasonryGrid.count(
-                      crossAxisCount: 2,
+                      crossAxisCount: MediaQuery.sizeOf(context).width > 800 ? 4 : (MediaQuery.sizeOf(context).width > 600 ? 3 : 2),
                       mainAxisSpacing: 16,
                       crossAxisSpacing: 16,
                       childCount: filteredCategories.length,
@@ -794,7 +969,11 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                           isSelected: isSelected,
                           onTap: () {
                             if (item.isOwnWords) {
-                              _openCustomWordsScreen();
+                              if (hideControls) {
+                                setState(() => _sidebarIndex = 1);
+                              } else {
+                                _openCustomWordsScreen();
+                              }
                             } else {
                               _toggleCategory(item.category);
                             }
@@ -807,11 +986,19 @@ class _StirnratenScreenState extends State<StirnratenScreen>
               ),
             ),
           ),
-          _BottomActionBar(
-            selectedCount: selectedCount,
-            onPressed: selectedCount == 0 ? null : _startSelectedCategories,
           ),
-          if (_showSettingsPanel)
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: _BottomActionBar(
+                selectedCount: selectedCount,
+                onPressed: selectedCount == 0 ? null : _startSelectedCategories,
+              ),
+            ),
+          ),
+          if (!hideControls && _showSettingsPanel)
             Positioned.fill(
               child: GestureDetector(
                 onTap: _closeSettingsPanel,
@@ -822,7 +1009,7 @@ class _StirnratenScreenState extends State<StirnratenScreen>
                 ),
               ),
             ),
-          if (_showSettingsPanel)
+          if (!hideControls && _showSettingsPanel)
             Positioned(
               top: topInset + 88,
               right: 20,
@@ -936,7 +1123,28 @@ class _StirnratenScreenState extends State<StirnratenScreen>
   }
 
   Widget _buildGame() {
-    return Stack(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _handlePass();
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          _handleCorrect();
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+          _showExitGameConfirmDialog();
+          return KeyEventResult.handled;
+        } else if (event.logicalKey == LogicalKeyboardKey.space) {
+          if (_snapshot.state == StirnratenGameState.playing) {
+            _togglePause();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Stack(
       children: [
         Container(
           width: double.infinity,
@@ -1041,7 +1249,6 @@ class _StirnratenScreenState extends State<StirnratenScreen>
             ],
           ),
         ),
-        // Feedback Overlay - MUSS ZULETZT IM STACK SEIN f?r h?chste Z-Order
         if (_feedbackColor != null)
           Positioned.fill(
             child: IgnorePointer(
@@ -1068,7 +1275,25 @@ class _StirnratenScreenState extends State<StirnratenScreen>
               ),
             ),
           ),
+        if (_isPaused)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.6),
+              child: Center(
+                child: Text(
+                  'PAUSE',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
+    ),
     );
   }
 
@@ -1745,8 +1970,8 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool isFocused;
-  final VoidCallback onBack;
-  final VoidCallback onSettings;
+  final VoidCallback? onBack;
+  final VoidCallback? onSettings;
   final ValueChanged<String> onQueryChanged;
 
   _CategoryHeaderDelegate({
@@ -1797,10 +2022,13 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
         children: [
           Row(
             children: [
-              _IconCircleButton(
-                icon: Icons.arrow_back_rounded,
-                onTap: onBack,
-              ),
+              if (onBack != null)
+                _IconCircleButton(
+                  icon: Icons.arrow_back_rounded,
+                  onTap: onBack!,
+                )
+              else
+                const SizedBox(width: 48),
               Expanded(
                 child: Center(
                   child: Text(
@@ -1814,11 +2042,14 @@ class _CategoryHeaderDelegate extends SliverPersistentHeaderDelegate {
                   ),
                 ),
               ),
-              _IconCircleButton(
-                icon: Icons.settings_rounded,
-                onTap: onSettings,
-                isPrimary: true,
-              ),
+              if (onSettings != null)
+                _IconCircleButton(
+                  icon: Icons.settings_rounded,
+                  onTap: onSettings!,
+                  isPrimary: true,
+                )
+              else
+                const SizedBox(width: 48),
             ],
           ),
           const SizedBox(height: 12),
@@ -2007,6 +2238,7 @@ class CustomWordsScreen extends StatefulWidget {
   final void Function(CustomWordList list) onPlay;
   final WordlistRepository? repository;
   final AIWordlistService? aiService;
+  final bool showBackButton;
 
   const CustomWordsScreen({
     super.key,
@@ -2014,6 +2246,7 @@ class CustomWordsScreen extends StatefulWidget {
     required this.onPlay,
     this.repository,
     this.aiService,
+    this.showBackButton = true,
   });
 
   @override
@@ -2279,19 +2512,24 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
       body: Stack(
         children: [
           const _CategoryBackground(),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                   child: Row(
                     children: [
-                      _HeaderIconButton(
-                        icon: Icons.arrow_back_rounded,
-                        onTap: () => Navigator.pop(context),
-                      ),
-                      const SizedBox(width: 12),
+                      if (widget.showBackButton) ...[
+                        _HeaderIconButton(
+                          icon: Icons.arrow_back_rounded,
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       Expanded(
                         child: Text(
                           'Eigene Wörter',
@@ -2367,6 +2605,8 @@ class _CustomWordsScreenState extends State<CustomWordsScreen> {
               ],
             ),
           ),
+          ),
+          ),
         ],
       ),
     );
@@ -2397,10 +2637,13 @@ class _CustomListWordsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const _CategoryBackground(),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                   child: Row(
@@ -2535,6 +2778,8 @@ class _CustomListWordsScreen extends StatelessWidget {
               ],
             ),
           ),
+          ),
+          ),
         ],
       ),
     );
@@ -2650,10 +2895,13 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
       body: Stack(
         children: [
           const _CategoryBackground(),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                   child: Row(
@@ -2799,6 +3047,8 @@ class _CustomWordEditorScreenState extends State<CustomWordEditorScreen> {
                 ),
               ],
             ),
+          ),
+          ),
           ),
         ],
       ),
@@ -3663,5 +3913,43 @@ class _NoScrollbarBehavior extends ScrollBehavior {
     ScrollableDetails details,
   ) {
     return child;
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected ? Colors.white : Colors.white60;
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        leading: Icon(icon, color: color),
+        title: Text(
+          label,
+          style: GoogleFonts.nunito(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        selected: isSelected,
+        selectedTileColor: Colors.white.withValues(alpha: 0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+        onTap: onTap,
+      ),
+    );
   }
 }

@@ -79,12 +79,14 @@ class _CategoryCardState extends State<CategoryCard> {
     final showGlow = isSelected;
 
     return RepaintBoundary(
-      child: GestureDetector(
-        onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
-        onTapCancel: () => _setPressed(false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
           scale: scale,
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
@@ -217,6 +219,7 @@ class _CategoryCardState extends State<CategoryCard> {
           ),
         ),
       ),
+    ),
     );
   }
 }

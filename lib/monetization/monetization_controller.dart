@@ -250,13 +250,11 @@ class MonetizationController extends ChangeNotifier {
       await _prefs.savePremium(true);
     } else if (snapshot.isPremium != null && snapshot.isPremium != _isPremium) {
       final serverPremium = snapshot.isPremium!;
-      // Keep existing premium entitlement locally; backend may lag temporarily.
-      if (_isPremium && !serverPremium) {
-        await _prefs.savePremium(true);
-      } else {
-        _isPremium = serverPremium;
-        await _prefs.savePremium(_isPremium);
-      }
+      // Trust the server's premium status. If the server says "not premium",
+      // downgrade locally — the old behaviour of always preserving local premium
+      // caused phantom-premium on simulators/devices with stale SharedPreferences.
+      _isPremium = serverPremium;
+      await _prefs.savePremium(_isPremium);
     }
     _dailyAiGenerationsDateKey = snapshot.dateKey;
     _dailyAiGenerationsUsed = snapshot.used;

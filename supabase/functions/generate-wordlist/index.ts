@@ -246,57 +246,25 @@ function extractAIResponsePayload(raw: unknown): Record<string, unknown> | null 
 
 function buildSystemPrompt(): string {
   return `
-You are generating premium word lists for a fast-paced guessing game (like Head's Up / charades).
-Your output will be parsed by a strict program. You MUST follow formatting rules exactly.
+You generate premium word lists for a fast guessing game.
+Return strict JSON only.
+Goal: deliver EXACTLY Count playable words.
 
-PRIMARY GOAL:
-Deliver EXACTLY Count playable, high-quality guessing words that feel worth paying for.
+Quality rules:
+- Prefer concrete nouns (visual, actable).
+- No abstract/meta terms (e.g. thing, object, category, stuff).
+- Words must be common, guessable, and not niche.
+- Keep diversity; avoid near-duplicates and repetitive micro-categories.
+- Difficulty: easy=very common, medium=common but more specific, hard=specific yet still widely known.
 
-NON-NEGOTIABLE RULES (QUALITY):
-1) Word type
-- Prefer concrete nouns (visual, tangible, actable).
-- NO abstract concepts.
-- NO meta-words (thing, object, element, category, stuff).
-- NO overly technical jargon unless difficulty="hard" and still widely known.
-
-2) Playability
-Each word MUST be:
-- Easy to describe without saying the word.
-- Pantomime-friendly / guessable in a group.
-- Commonly known in the requested language.
-- Not niche/academic/insider.
-
-3) Diversity
-- Avoid synonym clusters and near-duplicates.
-- Avoid repetitive micro-categories.
-- If topic is broad: diversify internally into subthemes.
-- If topic is narrow: maximize variation inside the topic.
-
-4) Difficulty calibration
-- easy: very common, highly visual, everyday vocabulary.
-- medium: common, slightly more specific or creative, still widely known.
-- hard: specific but still culturally known and playable. NO obscure dictionary words.
-
-NON-NEGOTIABLE RULES (FORMAT):
-- Prefer single-word terms.
-- Maximum 2 words only if extremely common and natural.
-- NO emojis.
-- NO numbering.
-- NO bullet points.
-- NO explanations.
-- NO duplicates (case-insensitive).
+Format rules:
+- Prefer 1 word; max 2 words if very common.
+- No emojis, numbering, bullet points, or explanations.
+- No duplicates (case-insensitive).
 - Max 64 characters per word.
-- Language must match exactly.
+- Language must match the request exactly.
 
-MANDATORY SELF-CHECK:
-- First, generate a candidate pool of at least Count + 20 words.
-- Then filter strictly by all rules above.
-- Remove weak / abstract / unplayable / too-similar / repetitive items.
-- Ensure variety across subthemes.
-- If after filtering you have less than Count items, generate additional candidates and repeat until you have EXACTLY Count.
-
-OUTPUT:
-Return only valid JSON with exactly:
+Output exactly:
 {
   "title": "string",
   "language": "de or en",
@@ -304,8 +272,8 @@ Return only valid JSON with exactly:
     { "word": "string" }
   ]
 }
-- No markdown, no comments, no extra keys.
-`.trim();
+- No markdown, comments, or extra keys.
+  `.trim();
 }
 
 function buildUserPrompt(input: ClientRequest["input"]): string {
@@ -329,12 +297,14 @@ function buildUserPrompt(input: ClientRequest["input"]): string {
 function buildUserPromptWithExcludes(args: {
   input: ClientRequest["input"];
   excludeTerms?: string[];
+  attempt: number;
 }): string {
   const base = buildUserPrompt(args.input);
+  if (args.attempt < 1) return base;
   const excludes = (args.excludeTerms ?? [])
     .map((t) => (t ?? "").trim())
     .filter(Boolean)
-    .slice(0, 60);
+    .slice(0, 20);
   if (!excludes.length) return base;
   return `${base}\nexclude_terms: ${excludes.join(", ")}`.trim();
 }
@@ -555,7 +525,7 @@ Deno.serve(async (req: Request) => {
   let normalized: string[] = [];
   let title: string | null = null;
 
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const askCount = computeAskCount({
       targetCount,
       currentValidCount: normalized.length,
@@ -572,6 +542,7 @@ Deno.serve(async (req: Request) => {
         count: askCount,
         title: requestedTitle || undefined,
       } as any,
+      attempt,
       excludeTerms: normalized,
     });
 

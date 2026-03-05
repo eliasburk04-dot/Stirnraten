@@ -472,6 +472,14 @@ class MonetizationController extends ChangeNotifier {
           await setPremium(true);
           _iapStatusMessage = null;
           notifyListeners();
+        } else if (purchase.status == PurchaseStatus.purchased) {
+          // The store has confirmed this purchase – the user has been charged.
+          // Grant premium immediately so paying users always receive their
+          // product, even when server-side receipt verification is temporarily
+          // unavailable (e.g. StoreKit 2 receipt not yet propagated).
+          await setPremium(true);
+          _iapStatusMessage = null;
+          notifyListeners();
         } else {
           _iapStatusMessage =
               'Kauf erkannt, aber Verifizierung fehlgeschlagen. Bitte "Käufe wiederherstellen" erneut ausführen.';
@@ -481,6 +489,35 @@ class MonetizationController extends ChangeNotifier {
         if (purchase.pendingCompletePurchase) {
           await _iapClient.completePurchase(purchase);
         }
+
+        // After completing a fresh purchase that was granted optimistically
+        // (without server verification), retry server sync in the background
+        // so the backend eventually records the premium status.
+        if (!verified && purchase.status == PurchaseStatus.purchased) {
+          unawaited(_retryServerSync(expectedProductId));
+        }
+      }
+    }
+  }
+
+  /// Retries server-side premium verification in the background after a
+  /// purchase was granted optimistically. This ensures the backend eventually
+  /// records the premium status even when initial verification failed.
+  Future<void> _retryServerSync(String productId) async {
+    final platform =
+        defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
+    for (var attempt = 0; attempt < 3; attempt++) {
+      await Future<void>.delayed(Duration(milliseconds: 800 * (attempt + 1)));
+      try {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final ok = await _verifyWithFreshIosReceipt(productId: productId);
+          if (ok) return;
+        } else {
+          // On Android we have no separate receipt refresh; nothing more to do.
+          return;
+        }
+      } catch (_) {
+        // Best-effort: swallow errors and retry.
       }
     }
   }

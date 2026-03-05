@@ -57,7 +57,7 @@ void main() {
   });
 
   test(
-      'applyServerAiUsage keeps local premium when server says free',
+      'applyServerAiUsage downgrades local premium when server says free',
       () async {
     final controller = MonetizationController(
       iapClient: _FakeIapClient(),
@@ -77,7 +77,44 @@ void main() {
       ),
     );
 
+    // Server is authoritative — if it says "not premium", local state is
+    // downgraded to avoid phantom-premium on devices with stale prefs.
+    expect(controller.isPremium, isFalse);
+  });
+
+  test(
+      'fresh purchase grants premium even when server verification fails',
+      () async {
+    final iap = _FakeIapClient();
+    final verifier = _FakePremiumSyncClient(result: false);
+    final receipts = _FakeIosReceiptClient();
+    final controller = MonetizationController(
+      iapClient: iap,
+      premiumSyncClient: verifier,
+      iosReceiptClient: receipts,
+    );
+    await controller.init();
+
+    final purchase = PurchaseDetails(
+      productID: 'com.stirnraten.app.premium_lifetime',
+      verificationData: PurchaseVerificationData(
+        localVerificationData: 'local',
+        serverVerificationData: 'server_receipt_blob',
+        source: 'app_store',
+      ),
+      transactionDate: DateTime.now().millisecondsSinceEpoch.toString(),
+      status: PurchaseStatus.purchased,
+    )..pendingCompletePurchase = true;
+
+    iap.emit(<PurchaseDetails>[purchase]);
+    // _verifyWithFreshIosReceipt has internal retry delays (~350ms per attempt),
+    // so wait long enough for the full verification + optimistic grant path.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    // User was charged → must receive premium even without server confirmation.
     expect(controller.isPremium, isTrue);
+    expect(iap.completedPurchases, 1);
+    expect(controller.iapStatusMessage, isNull);
   });
 
   test(

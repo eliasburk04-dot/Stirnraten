@@ -504,8 +504,6 @@ class MonetizationController extends ChangeNotifier {
   /// purchase was granted optimistically. This ensures the backend eventually
   /// records the premium status even when initial verification failed.
   Future<void> _retryServerSync(String productId) async {
-    final platform =
-        defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
     for (var attempt = 0; attempt < 3; attempt++) {
       await Future<void>.delayed(Duration(milliseconds: 800 * (attempt + 1)));
       try {

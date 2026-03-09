@@ -513,7 +513,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Keep a sensible default (models can be deprecated; allow overriding via secret).
-  const model = (Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile").trim();
+  const model = (Deno.env.get("GROQ_MODEL") ?? "llama-3.1-8b-instant").trim();
   const temperature = Number(Deno.env.get("GROQ_TEMPERATURE") ?? "0.4");
 
   const system = buildSystemPrompt();

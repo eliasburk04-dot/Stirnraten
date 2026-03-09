@@ -63,7 +63,7 @@ supabase secrets set --project-ref YOUR_PROJECT_REF GROQ_API_KEY=YOUR_GROQ_KEY
 
 Optional:
 ```bash
-supabase secrets set --project-ref YOUR_PROJECT_REF GROQ_MODEL=llama-3.1-70b-versatile GROQ_TEMPERATURE=0.4
+supabase secrets set --project-ref YOUR_PROJECT_REF GROQ_MODEL=llama-3.1-8b-instant GROQ_TEMPERATURE=0.4
 ```
 
 ## 6) Sicherheits-Hinweis

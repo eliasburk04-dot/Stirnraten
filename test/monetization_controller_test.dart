@@ -56,8 +56,7 @@ void main() {
     expect(reloaded.dailyAiGenerationsUsed, 0);
   });
 
-  test(
-      'applyServerAiUsage downgrades local premium when server says free',
+  test('applyServerAiUsage downgrades local premium when server says free',
       () async {
     final controller = MonetizationController(
       iapClient: _FakeIapClient(),
@@ -82,8 +81,7 @@ void main() {
     expect(controller.isPremium, isFalse);
   });
 
-  test(
-      'fresh purchase grants premium even when server verification fails',
+  test('fresh purchase grants premium even when server verification fails',
       () async {
     final iap = _FakeIapClient();
     final verifier = _FakePremiumSyncClient(result: false);
@@ -304,6 +302,81 @@ void main() {
     expect(receipts.refreshCalls, 1);
     expect(controller.isPremium, isTrue);
     expect(controller.iapStatusMessage, isNull);
+  });
+
+  test('buyPremium keeps UI busy until purchase update arrives', () async {
+    final iap = _FakeIapClient();
+    final controller = MonetizationController(
+      iapClient: iap,
+      premiumSyncClient: _FakePremiumSyncClient(),
+      iosReceiptClient: _FakeIosReceiptClient(),
+    );
+    await controller.init();
+
+    final started = await controller.buyPremium();
+
+    expect(started, isTrue);
+    expect(controller.isPurchaseBusy, isTrue);
+    expect(controller.iapStatusMessage, contains('App Store wird geöffnet'));
+
+    final failedPurchase = PurchaseDetails(
+      productID: 'com.stirnraten.app.premium_lifetime',
+      verificationData: PurchaseVerificationData(
+        localVerificationData: 'local',
+        serverVerificationData: 'server_receipt_blob',
+        source: 'app_store',
+      ),
+      transactionDate: DateTime.now().millisecondsSinceEpoch.toString(),
+      status: PurchaseStatus.error,
+    )..error = IAPError(
+        source: 'app_store',
+        code: 'purchase_error',
+        message: 'SKErrorDomain Code=2 paymentCancelled',
+      );
+
+    iap.emit(<PurchaseDetails>[failedPurchase]);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(controller.isPurchaseBusy, isFalse);
+    expect(controller.iapStatusMessage, 'Kauf abgebrochen.');
+  });
+
+  test('buyPremium surfaces timeout when store sends no callback', () async {
+    final iap = _FakeIapClient();
+    final controller = MonetizationController(
+      iapClient: iap,
+      premiumSyncClient: _FakePremiumSyncClient(),
+      iosReceiptClient: _FakeIosReceiptClient(),
+      purchaseFlowTimeout: const Duration(milliseconds: 20),
+    );
+    await controller.init();
+
+    final started = await controller.buyPremium();
+    expect(started, isTrue);
+    expect(controller.isPurchaseBusy, isTrue);
+
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(controller.isPurchaseBusy, isFalse);
+    expect(
+      controller.iapStatusMessage,
+      contains('Kauf wurde nicht bestätigt'),
+    );
+  });
+
+  test('maps SKErrorDomain failures to actionable copy', () {
+    expect(
+      describePurchaseFailure('SKErrorDomain Code=0 unknown'),
+      contains('App Store Fehler'),
+    );
+    expect(
+      describePurchaseFailure('SKErrorDomain Code=7 networkConnectionFailed'),
+      contains('App Store aktuell nicht erreichbar'),
+    );
+    expect(
+      describePurchaseFailure('SKErrorDomain Code=2 paymentCancelled'),
+      'Kauf abgebrochen.',
+    );
   });
 }
 

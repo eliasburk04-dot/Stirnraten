@@ -137,9 +137,7 @@ class _PremiumSheet extends StatelessWidget {
                             !monetization.canAttemptPurchase
                         ? null
                         : () async {
-                            final ok = await monetization.buyPremium();
-                            if (!context.mounted) return;
-                            if (ok) Navigator.pop(context);
+                            await monetization.buyPremium();
                           },
                   ),
                 ),

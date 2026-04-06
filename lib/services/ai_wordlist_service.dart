@@ -200,9 +200,37 @@ abstract class AIWordlistService {
   });
 }
 
-/// Preferred implementation: calls the Supabase Edge Function using the initialized
-/// Supabase client (`functions.invoke`). This avoids misconfigured endpoints and
-/// guarantees the JWT matches the current Supabase project.
+AIWordlistService? selectPreferredAIWordlistService({
+  AIWordlistService? endpointService,
+  AIWordlistService? invokeService,
+}) {
+  return endpointService ?? invokeService;
+}
+
+AIWordlistService? buildDefaultAIWordlistService() {
+  // Prefer the explicit Edge Function endpoint when configured. This lets us
+  // control Authorization/apikey headers directly and has proven more robust
+  // in release builds. Keep functions.invoke as a fallback for dev contexts.
+  return selectPreferredAIWordlistService(
+    endpointService: HttpAIWordlistService.fromEnvironment(),
+    invokeService: SupabaseAIWordlistService.fromInitializedClient(),
+  );
+}
+
+bool shouldHardResetSupabaseSessionOn401(String detail) {
+  final normalized = detail.trim().toLowerCase();
+  if (normalized.isEmpty) return false;
+  return normalized.contains('invalid jwt') ||
+      normalized.contains('invalid_jwt') ||
+      normalized.contains('invalidjwttoken') ||
+      normalized.contains('unauthorized') ||
+      normalized.contains('invalid_authorization') ||
+      normalized.contains('missing_authorization') ||
+      normalized.contains('auth_verify_failed');
+}
+
+/// Fallback implementation: calls the Supabase Edge Function using the initialized
+/// Supabase client (`functions.invoke`) when no explicit endpoint is configured.
 class SupabaseAIWordlistService implements AIWordlistService {
   final SupabaseClient _client;
   final SupabaseAuthService _auth;
@@ -624,11 +652,7 @@ class HttpAIWordlistService implements AIWordlistService {
     if (response.statusCode != 401) return response;
 
     final detail = _extractErrorDetail(response.body).toLowerCase();
-    final looksLikeInvalidJwt = detail.contains('invalid jwt') ||
-        detail.contains('invalid_jwt') ||
-        detail.contains('invalidjwttoken');
-
-    if (looksLikeInvalidJwt) {
+    if (shouldHardResetSupabaseSessionOn401(detail)) {
       await _hardResetSupabaseSession();
     } else {
       await _refreshSupabaseSessionIfPossible();
@@ -675,13 +699,16 @@ class HttpAIWordlistService implements AIWordlistService {
   Future<String> _resolveSupabaseBearerToken() async {
     try {
       final sb = Supabase.instance.client;
-      var token = sb.auth.currentSession?.accessToken;
-
-      if (token == null || token.trim().isEmpty) {
-        // "No login UI" flow: use Supabase Anonymous sign-in.
-        await sb.auth.signInAnonymously();
-        token = sb.auth.currentSession?.accessToken;
+      final auth = SupabaseAuthService(sb);
+      final signedIn = await auth.ensureAnonymousSession(
+        timeout: const Duration(seconds: 25),
+      );
+      if (!signedIn) {
+        throw const AIWordlistException(
+          'Supabase Login Timeout. Bitte erneut versuchen.',
+        );
       }
+      final token = sb.auth.currentSession?.accessToken;
 
       if (token != null && token.trim().isNotEmpty) {
         return token;

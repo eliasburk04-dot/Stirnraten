@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/supabase_auth_service.dart';
 import 'ai_usage_snapshot.dart';
 import 'berlin_date.dart';
 import 'daily_quota.dart';
@@ -67,16 +69,40 @@ class SupabasePremiumSyncClient implements PremiumSyncClient {
   }) async {
     try {
       final sb = Supabase.instance.client;
-      final res = await sb.functions.invoke(
-        'verify-premium',
-        body: <String, dynamic>{
-          'platform': platform,
-          'productId': productId,
-          'verificationData': verificationData,
-        },
+      final auth = SupabaseAuthService(sb);
+      final signedIn = await auth.ensureAnonymousSession(
+        timeout: const Duration(seconds: 25),
       );
-      final data = res.data;
-      return data is Map && data['premium'] == true;
+      if (!signedIn) return false;
+
+      Future<bool> invokeOnce() async {
+        final res = await sb.functions.invoke(
+          'verify-premium',
+          body: <String, dynamic>{
+            'platform': platform,
+            'productId': productId,
+            'verificationData': verificationData,
+          },
+        );
+        final data = res.data;
+        return data is Map && data['premium'] == true;
+      }
+
+      try {
+        return await invokeOnce();
+      } on FunctionException catch (error) {
+        if (error.status != 401) rethrow;
+        try {
+          await sb.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {
+          // ignore
+        }
+        final recovered = await auth.ensureAnonymousSession(
+          timeout: const Duration(seconds: 25),
+        );
+        if (!recovered) return false;
+        return await invokeOnce();
+      }
     } catch (_) {
       return false;
     }
@@ -111,6 +137,51 @@ class StoreKitIosReceiptClient implements IosReceiptClient {
   }
 }
 
+String describePurchaseFailure(Object? error) {
+  if (error == null) {
+    return 'Kauf fehlgeschlagen. Bitte erneut versuchen.';
+  }
+
+  if (error is PlatformException) {
+    return describePurchaseFailure(
+      '${error.code} ${error.message ?? ''} ${error.details ?? ''}',
+    );
+  }
+
+  if (error is IAPError) {
+    return describePurchaseFailure(
+      '${error.code} ${error.message} ${error.details ?? ''}',
+    );
+  }
+
+  final raw = error.toString().trim();
+  final normalized = raw.toLowerCase();
+  if (normalized.isEmpty) {
+    return 'Kauf fehlgeschlagen. Bitte erneut versuchen.';
+  }
+  if (normalized.contains('payment cancelled') ||
+      normalized.contains('cancelled') ||
+      normalized.contains('canceled') ||
+      normalized.contains('code=2')) {
+    return 'Kauf abgebrochen.';
+  }
+  if (normalized.contains('skerrordomain')) {
+    if (normalized.contains('code=5') || normalized.contains('not allowed')) {
+      return 'Käufe sind auf diesem Gerät derzeit nicht erlaubt.';
+    }
+    if (normalized.contains('code=7') ||
+        normalized.contains('network') ||
+        normalized.contains('store not available')) {
+      return 'App Store aktuell nicht erreichbar. Bitte später erneut versuchen.';
+    }
+    return 'App Store Fehler beim Kauf. Bitte App Store öffnen und erneut versuchen.';
+  }
+  if (normalized.contains('store not available')) {
+    return 'App Store aktuell nicht erreichbar. Bitte später erneut versuchen.';
+  }
+  return 'Kauf fehlgeschlagen. Bitte erneut versuchen.';
+}
+
 class MonetizationController extends ChangeNotifier {
   static const String _envIosProductId =
       String.fromEnvironment('IOS_IAP_PREMIUM_LIFETIME_PRODUCT_ID');
@@ -125,6 +196,7 @@ class MonetizationController extends ChangeNotifier {
   final MonetizationIapClient _iapClient;
   final PremiumSyncClient _premiumSyncClient;
   final IosReceiptClient _iosReceiptClient;
+  final Duration _purchaseFlowTimeout;
 
   bool _initialized = false;
   bool _iapConfigured = false;
@@ -137,6 +209,7 @@ class MonetizationController extends ChangeNotifier {
   String? _iapStatusMessage;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
+  Timer? _purchaseWatchdog;
   ProductDetails? _premiumProduct;
 
   MonetizationController({
@@ -144,13 +217,15 @@ class MonetizationController extends ChangeNotifier {
     MonetizationIapClient? iapClient,
     PremiumSyncClient? premiumSyncClient,
     IosReceiptClient? iosReceiptClient,
+    Duration purchaseFlowTimeout = const Duration(seconds: 25),
   })  : _prefs = prefs ?? MonetizationPrefs(),
         _iapClient =
             iapClient ?? StoreMonetizationIapClient(InAppPurchase.instance),
         _premiumSyncClient =
             premiumSyncClient ?? const SupabasePremiumSyncClient(),
         _iosReceiptClient =
-            iosReceiptClient ?? const StoreKitIosReceiptClient();
+            iosReceiptClient ?? const StoreKitIosReceiptClient(),
+        _purchaseFlowTimeout = purchaseFlowTimeout;
 
   bool get isInitialized => _initialized;
   bool get isPremium => _isPremium;
@@ -305,10 +380,23 @@ class MonetizationController extends ChangeNotifier {
       _purchaseSub?.cancel();
       _purchaseSub = _iapClient.purchaseStream.listen(
         _handlePurchaseUpdates,
-        onError: (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          _cancelPurchaseWatchdog();
+          _purchaseBusy = false;
+          _iapStatusMessage = describePurchaseFailure(error);
+          notifyListeners();
+        },
       );
 
       final details = await _iapClient.queryProductDetails(<String>{productId});
+      if (kDebugMode) {
+        debugPrint(
+          'IAP query result: productId=$productId '
+          'available=${details.productDetails.length} '
+          'notFound=${details.notFoundIDs} '
+          'error=${details.error}',
+        );
+      }
       if (details.error != null) {
         _iapConfigured = false;
         _iapStatusMessage =
@@ -321,7 +409,11 @@ class MonetizationController extends ChangeNotifier {
       _iapConfigured = _premiumProduct != null;
       _iapStatusMessage = _iapConfigured
           ? null
-          : (exposeErrors ? 'Produkt nicht verfügbar.' : null);
+          : (exposeErrors
+              ? (kDebugMode && details.notFoundIDs.isNotEmpty
+                  ? 'Produkt nicht verfügbar (${details.notFoundIDs.join(', ')}).'
+                  : 'Produkt nicht verfügbar.')
+              : null);
     } catch (e) {
       _iapConfigured = false;
       _iapStatusMessage = exposeErrors ? 'IAP nicht verfügbar: $e' : null;
@@ -340,6 +432,7 @@ class MonetizationController extends ChangeNotifier {
     _purchaseBusy = true;
     _iapStatusMessage = null;
     notifyListeners();
+    var purchaseFlowStarted = false;
 
     try {
       if (!_iapConfigured || _premiumProduct == null) {
@@ -361,15 +454,21 @@ class MonetizationController extends ChangeNotifier {
         notifyListeners();
         return false;
       }
+      purchaseFlowStarted = true;
+      _armPurchaseWatchdog();
+      _iapStatusMessage = 'App Store wird geöffnet …';
+      notifyListeners();
       // Actual premium activation happens in purchaseStream handler.
       return true;
     } catch (e) {
-      _iapStatusMessage = 'Kauf fehlgeschlagen: $e';
+      _iapStatusMessage = describePurchaseFailure(e);
       notifyListeners();
       return false;
     } finally {
-      _purchaseBusy = false;
-      notifyListeners();
+      if (!purchaseFlowStarted) {
+        _purchaseBusy = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -403,7 +502,7 @@ class MonetizationController extends ChangeNotifier {
       // Restores will flow through purchaseStream handler.
       return true;
     } catch (e) {
-      _iapStatusMessage = 'Wiederherstellen fehlgeschlagen: $e';
+      _iapStatusMessage = describePurchaseFailure(e);
       notifyListeners();
       return false;
     } finally {
@@ -440,16 +539,20 @@ class MonetizationController extends ChangeNotifier {
 
     for (final purchase in purchases) {
       if (purchase.productID != expectedProductId) continue;
+      _cancelPurchaseWatchdog();
 
       if (purchase.status == PurchaseStatus.pending) {
+        _purchaseBusy = true;
         _iapStatusMessage = 'Zahlung ausstehend …';
         notifyListeners();
         continue;
       }
 
       if (purchase.status == PurchaseStatus.error) {
-        _iapStatusMessage =
-            'Kauf fehlgeschlagen: ${purchase.error?.message ?? 'Unbekannter Fehler'}';
+        _purchaseBusy = false;
+        _iapStatusMessage = describePurchaseFailure(
+          purchase.error ?? purchase.error?.message,
+        );
         notifyListeners();
         if (purchase.pendingCompletePurchase) {
           await _iapClient.completePurchase(purchase);
@@ -471,7 +574,6 @@ class MonetizationController extends ChangeNotifier {
         if (verified) {
           await setPremium(true);
           _iapStatusMessage = null;
-          notifyListeners();
         } else if (purchase.status == PurchaseStatus.purchased) {
           // The store has confirmed this purchase – the user has been charged.
           // Grant premium immediately so paying users always receive their
@@ -479,12 +581,12 @@ class MonetizationController extends ChangeNotifier {
           // unavailable (e.g. StoreKit 2 receipt not yet propagated).
           await setPremium(true);
           _iapStatusMessage = null;
-          notifyListeners();
         } else {
           _iapStatusMessage =
               'Kauf erkannt, aber Verifizierung fehlgeschlagen. Bitte "Käufe wiederherstellen" erneut ausführen.';
-          notifyListeners();
         }
+        _purchaseBusy = false;
+        notifyListeners();
 
         if (purchase.pendingCompletePurchase) {
           await _iapClient.completePurchase(purchase);
@@ -582,8 +684,26 @@ class MonetizationController extends ChangeNotifier {
     return parts.every((part) => part.isNotEmpty && b64Url.hasMatch(part));
   }
 
+  void _armPurchaseWatchdog() {
+    _cancelPurchaseWatchdog();
+    if (_purchaseFlowTimeout <= Duration.zero) return;
+    _purchaseWatchdog = Timer(_purchaseFlowTimeout, () {
+      if (!_purchaseBusy) return;
+      _purchaseBusy = false;
+      _iapStatusMessage =
+          'Kauf wurde nicht bestätigt. Bitte erneut versuchen oder "Käufe wiederherstellen" ausführen.';
+      notifyListeners();
+    });
+  }
+
+  void _cancelPurchaseWatchdog() {
+    _purchaseWatchdog?.cancel();
+    _purchaseWatchdog = null;
+  }
+
   @override
   void dispose() {
+    _cancelPurchaseWatchdog();
     _purchaseSub?.cancel();
     super.dispose();
   }

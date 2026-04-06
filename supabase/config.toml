@@ -364,6 +364,16 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# These functions verify the Supabase user token inside the function via
+# `auth.getUser()`. Keep gateway JWT verification off so they continue to work
+# with asymmetric signing keys / API key migration and don't fail with
+# `401 {"message":"Invalid JWT"}` before our code runs.
+[functions.generate-wordlist]
+verify_jwt = false
+
+[functions.verify-premium]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

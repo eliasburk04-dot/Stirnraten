@@ -17,14 +17,13 @@ Future<void> showPremiumPaywall(
   required PaywallTrigger trigger,
   String? message,
 }) async {
-  final effects = EffectsConfig.of(context);
-  final blurSigma =
-      effects.allowBlur ? effects.blur(high: 10, medium: 7, low: 0) : 0.0;
-
   await showDialog<void>(
     context: context,
     barrierDismissible: true,
     builder: (context) {
+      final effects = EffectsConfig.of(context);
+      final blurSigma =
+          effects.allowBlur ? effects.blur(high: 10, medium: 7, low: 0) : 0.0;
       return Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
@@ -182,11 +181,7 @@ class _PaywallContent extends StatelessWidget {
                         !monetization.canAttemptPurchase
                     ? null
                     : () async {
-                        final ok = await monetization.buyPremium();
-                        if (!context.mounted) return;
-                        if (ok) {
-                          Navigator.pop(context);
-                        }
+                        await monetization.buyPremium();
                       },
               ),
             ),

@@ -17,10 +17,17 @@ Future<void> main() async {
 }
 
 Future<void> _configureIosStoreKitMode() async {
+  const forceStoreKit1 =
+      bool.fromEnvironment('FORCE_STOREKIT1', defaultValue: false);
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
     return;
   }
+  if (!forceStoreKit1) {
+    return;
+  }
   try {
+    // StoreKit 2 is the plugin default. Only force StoreKit 1 when explicitly
+    // requested for compatibility testing.
     // ignore: deprecated_member_use
     await InAppPurchaseStoreKitPlatform.enableStoreKit1();
   } catch (error) {

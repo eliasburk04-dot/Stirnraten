@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'custom_word_storage.dart';
+import 'supabase_auth_service.dart';
 
 class SupabaseWordlistException implements Exception {
   final String message;
@@ -60,7 +61,15 @@ class SupabaseSessionAuthProvider implements SupabaseAuthProvider {
   @override
   Future<SupabaseAuthContext?> current() async {
     try {
-      final session = Supabase.instance.client.auth.currentSession;
+      final client = Supabase.instance.client;
+      final auth = SupabaseAuthService(client);
+      final signedIn = await auth.ensureAnonymousSession(
+        timeout: const Duration(seconds: 25),
+      );
+      if (!signedIn) {
+        return null;
+      }
+      final session = client.auth.currentSession;
       final user = session?.user;
       final token = session?.accessToken;
       if (user == null || token == null || token.trim().isEmpty) {

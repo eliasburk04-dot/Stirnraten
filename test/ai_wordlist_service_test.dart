@@ -23,4 +23,30 @@ void main() {
     expect(parsed.language, 'en');
     expect(parsed.items.length, 3);
   });
+
+  test('hard-resets supabase session for unauthorized 401 details', () {
+    expect(
+      shouldHardResetSupabaseSessionOn401('unauthorized'),
+      isTrue,
+    );
+    expect(
+      shouldHardResetSupabaseSessionOn401('missing_authorization'),
+      isTrue,
+    );
+    expect(
+      shouldHardResetSupabaseSessionOn401('auth_verify_failed'),
+      isTrue,
+    );
+  });
+
+  test('does not hard-reset supabase session for unrelated 401 details', () {
+    expect(
+      shouldHardResetSupabaseSessionOn401('rate_limited'),
+      isFalse,
+    );
+    expect(
+      shouldHardResetSupabaseSessionOn401(''),
+      isFalse,
+    );
+  });
 }
